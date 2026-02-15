@@ -1,0 +1,40 @@
+/*
+ * cubo.h
+ *
+ * Declaração da classe Cubo e da estrutura Color. O cubo é um sólido 3D
+ * centrado na origem com aresta 2, desenhado como seis quads coloridos. Cada
+ * face tem uma cor RGB independente; a rotação é armazenada em graus nos
+ * eixos X, Y e Z. A face selecionada (para pintar com teclas 1/2/3) é
+ * determinada por color picking no método selectCurrentFace(x, y). Inline
+ * getters expõem a face selecionada e a cor de uma face por índice.
+ */
+
+#ifndef CUBO_H
+#define CUBO_H
+
+#include <GL/glut.h>
+
+struct Color {
+    float r, g, b;
+};
+
+class Cubo {
+private:
+    float rotX, rotY, rotZ;
+    Color faceColors[6];
+    int selectedFace;
+
+public:
+    Cubo();
+    void render();
+    void rotate(float dx, float dy, float dz);
+    void setRotation(float x, float y, float z);
+    void addColorToCurrentFace(float r, float g, float b);
+    void clearSelectedFace();
+    void selectCurrentFace(int x, int y);
+    int getSelectedFace() const { return selectedFace; }
+    Color getFaceColor(int face) const { return faceColors[face]; }
+    void setFaceColor(int face, float r, float g, float b);
+};
+
+#endif
