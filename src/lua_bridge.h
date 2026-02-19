@@ -14,6 +14,8 @@
 #ifndef LUA_BRIDGE_H
 #define LUA_BRIDGE_H
 
+#include <string>
+
 struct LuaBridgeImpl;
 
 class Cubo;
@@ -32,6 +34,8 @@ public:
     void mixColor(float r, float g, float b, float ar, float ag, float ab,
                   float& newR, float& newG, float& newB);
     void handleInput(Cubo& cube, unsigned char key);
+    void toggleFacePattern(Cubo& cube);
+    void setFacePhoto(int faceIndex, const std::string& path);
 };
 
 #endif

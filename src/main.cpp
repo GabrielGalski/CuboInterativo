@@ -40,6 +40,27 @@ void display() {
 
     cube.render();
 
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glOrtho(0, 1, 0, 1, -1, 1);
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+    glDisable(GL_DEPTH_TEST);
+    glBegin(GL_QUADS);
+    glColor4f(0.05f, 0.05f, 0.05f, 1.0f);
+    glVertex2f(0.8f, 0.0f);
+    glVertex2f(1.0f, 0.0f);
+    glVertex2f(1.0f, 1.0f);
+    glVertex2f(0.8f, 1.0f);
+    glEnd();
+    glEnable(GL_DEPTH_TEST);
+    glPopMatrix();
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
+
     glutSwapBuffers();
 }
 
@@ -83,6 +104,25 @@ void keyboard(unsigned char key, int x, int y) {
             bridge.mixColor(c.r, c.g, c.b, 0.0f, 0.0f, 1.0f, nr, ng, nb);
             cube.setFaceColor(cube.getSelectedFace(), nr, ng, nb);
             std::cout << "Adicionado azul à face " << cube.getSelectedFace() << std::endl;
+            break;
+        }
+
+        case 'f': case 'F':
+            bridge.toggleFacePattern(cube);
+            std::cout << "Padrão da face " << cube.getSelectedFace() << " alterado para " << cube.getFacePattern(cube.getSelectedFace()) << std::endl;
+            break;
+
+        case 'p': case 'P': {
+            int face = cube.getSelectedFace();
+            std::cout << "Caminho da imagem PPM para a face " << face << ": ";
+            std::string path;
+            std::cin >> path;
+            if (cube.setFacePhotoFromFile(face, path)) {
+                bridge.setFacePhoto(face, path);
+                std::cout << "Foto aplicada na face " << face << std::endl;
+            } else {
+                std::cout << "Não foi possível carregar a imagem" << std::endl;
+            }
             break;
         }
 
@@ -211,7 +251,7 @@ void reshape(int w, int h) {
 int main(int argc, char** argv) {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
-    glutInitWindowSize(800, 600);
+    glutInitWindowSize(1200, 720);
     glutInitWindowPosition(100, 100);
     glutCreateWindow("Cube Editor - C++ & Lua Integration");
 

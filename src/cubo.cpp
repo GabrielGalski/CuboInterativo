@@ -13,14 +13,143 @@
 #include "cubo.h"
 #include <iostream>
 #include <cmath>
+#include <vector>
+#include <fstream>
+#include <sstream>
+
+namespace {
+struct Vertex3 {
+    float x;
+    float y;
+    float z;
+};
+
+void faceVertices(int face, Vertex3& v0, Vertex3& v1, Vertex3& v2, Vertex3& v3) {
+    if (face == 0) {
+        v0 = {-1.0f, -1.0f,  1.0f};
+        v1 = { 1.0f, -1.0f,  1.0f};
+        v2 = { 1.0f,  1.0f,  1.0f};
+        v3 = {-1.0f,  1.0f,  1.0f};
+    } else if (face == 1) {
+        v0 = {-1.0f, -1.0f, -1.0f};
+        v1 = {-1.0f,  1.0f, -1.0f};
+        v2 = { 1.0f,  1.0f, -1.0f};
+        v3 = { 1.0f, -1.0f, -1.0f};
+    } else if (face == 2) {
+        v0 = {-1.0f,  1.0f, -1.0f};
+        v1 = {-1.0f,  1.0f,  1.0f};
+        v2 = { 1.0f,  1.0f,  1.0f};
+        v3 = { 1.0f,  1.0f, -1.0f};
+    } else if (face == 3) {
+        v0 = {-1.0f, -1.0f, -1.0f};
+        v1 = { 1.0f, -1.0f, -1.0f};
+        v2 = { 1.0f, -1.0f,  1.0f};
+        v3 = {-1.0f, -1.0f,  1.0f};
+    } else if (face == 4) {
+        v0 = { 1.0f, -1.0f, -1.0f};
+        v1 = { 1.0f,  1.0f, -1.0f};
+        v2 = { 1.0f,  1.0f,  1.0f};
+        v3 = { 1.0f, -1.0f,  1.0f};
+    } else {
+        v0 = {-1.0f, -1.0f, -1.0f};
+        v1 = {-1.0f, -1.0f,  1.0f};
+        v2 = {-1.0f,  1.0f,  1.0f};
+        v3 = {-1.0f,  1.0f, -1.0f};
+    }
+}
+
+bool loadPpm(const std::string& path, int& width, int& height, std::vector<unsigned char>& data) {
+    std::ifstream file(path.c_str());
+    if (!file.is_open()) {
+        return false;
+    }
+    std::string magic;
+    file >> magic;
+    if (magic != "P3") {
+        return false;
+    }
+    file >> width >> height;
+    int maxVal = 0;
+    file >> maxVal;
+    if (!file.good() || width <= 0 || height <= 0 || maxVal <= 0) {
+        return false;
+    }
+    data.resize(static_cast<size_t>(width) * static_cast<size_t>(height) * 3u);
+    for (int i = 0; i < width * height; ++i) {
+        int r = 0;
+        int g = 0;
+        int b = 0;
+        file >> r >> g >> b;
+        if (!file.good()) {
+            return false;
+        }
+        data[static_cast<size_t>(i) * 3u + 0u] = static_cast<unsigned char>(r * 255 / maxVal);
+        data[static_cast<size_t>(i) * 3u + 1u] = static_cast<unsigned char>(g * 255 / maxVal);
+        data[static_cast<size_t>(i) * 3u + 2u] = static_cast<unsigned char>(b * 255 / maxVal);
+    }
+    return true;
+}
+
+GLuint createTextureFromData(int width, int height, const std::vector<unsigned char>& data) {
+    GLuint texId = 0;
+    glGenTextures(1, &texId);
+    glBindTexture(GL_TEXTURE_2D, texId);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data.data());
+    return texId;
+}
+
+GLuint createStripeTexture() {
+    const int size = 64;
+    std::vector<unsigned char> data(static_cast<size_t>(size) * static_cast<size_t>(size) * 3u);
+    for (int y = 0; y < size; ++y) {
+        for (int x = 0; x < size; ++x) {
+            int stripe = (x / 8) % 2;
+            float v = stripe == 0 ? 0.3f : 0.7f;
+            unsigned char c = static_cast<unsigned char>(v * 255.0f);
+            size_t index = static_cast<size_t>(y) * static_cast<size_t>(size) * 3u + static_cast<size_t>(x) * 3u;
+            data[index + 0u] = c;
+            data[index + 1u] = c;
+            data[index + 2u] = c;
+        }
+    }
+    return createTextureFromData(size, size, data);
+}
+
+GLuint createDotsTexture() {
+    const int size = 64;
+    std::vector<unsigned char> data(static_cast<size_t>(size) * static_cast<size_t>(size) * 3u);
+    float center = (size - 1) * 0.5f;
+    float radius = size * 0.12f;
+    for (int y = 0; y < size; ++y) {
+        for (int x = 0; x < size; ++x) {
+            float dx = x - center;
+            float dy = y - center;
+            float dist = std::sqrt(dx * dx + dy * dy);
+            float v = dist < radius ? 0.9f : 0.3f;
+            unsigned char c = static_cast<unsigned char>(v * 255.0f);
+            size_t index = static_cast<size_t>(y) * static_cast<size_t>(size) * 3u + static_cast<size_t>(x) * 3u;
+            data[index + 0u] = c;
+            data[index + 1u] = c;
+            data[index + 2u] = c;
+        }
+    }
+    return createTextureFromData(size, size, data);
+}
+}
 
 /*
  * Construtor: rotações e face selecionada em zero; todas as seis faces
  * começam com cor branca (1, 1, 1).
  */
-Cubo::Cubo() : rotX(0), rotY(0), rotZ(0), selectedFace(0) {
+Cubo::Cubo() : rotX(0), rotY(0), rotZ(0), selectedFace(0), stripesTexture(0), dotsTexture(0) {
     for (int i = 0; i < 6; ++i) {
         faceColors[i] = {1.0f, 1.0f, 1.0f};
+        facePatterns[i] = 0;
+        faceTextures[i] = 0;
     }
 }
 
@@ -35,46 +164,75 @@ void Cubo::render() {
     glRotatef(rotX, 1.0f, 0.0f, 0.0f);
     glRotatef(rotY, 0.0f, 1.0f, 0.0f);
     glRotatef(rotZ, 0.0f, 0.0f, 1.0f);
-
-    glBegin(GL_QUADS);
-
-    glColor3f(faceColors[0].r, faceColors[0].g, faceColors[0].b);
-    glVertex3f(-1.0f, -1.0f,  1.0f);
-    glVertex3f( 1.0f, -1.0f,  1.0f);
-    glVertex3f( 1.0f,  1.0f,  1.0f);
-    glVertex3f(-1.0f,  1.0f,  1.0f);
-
-    glColor3f(faceColors[1].r, faceColors[1].g, faceColors[1].b);
-    glVertex3f(-1.0f, -1.0f, -1.0f);
-    glVertex3f(-1.0f,  1.0f, -1.0f);
-    glVertex3f( 1.0f,  1.0f, -1.0f);
-    glVertex3f( 1.0f, -1.0f, -1.0f);
-
-    glColor3f(faceColors[2].r, faceColors[2].g, faceColors[2].b);
-    glVertex3f(-1.0f,  1.0f, -1.0f);
-    glVertex3f(-1.0f,  1.0f,  1.0f);
-    glVertex3f( 1.0f,  1.0f,  1.0f);
-    glVertex3f( 1.0f,  1.0f, -1.0f);
-
-    glColor3f(faceColors[3].r, faceColors[3].g, faceColors[3].b);
-    glVertex3f(-1.0f, -1.0f, -1.0f);
-    glVertex3f( 1.0f, -1.0f, -1.0f);
-    glVertex3f( 1.0f, -1.0f,  1.0f);
-    glVertex3f(-1.0f, -1.0f,  1.0f);
-
-    glColor3f(faceColors[4].r, faceColors[4].g, faceColors[4].b);
-    glVertex3f( 1.0f, -1.0f, -1.0f);
-    glVertex3f( 1.0f,  1.0f, -1.0f);
-    glVertex3f( 1.0f,  1.0f,  1.0f);
-    glVertex3f( 1.0f, -1.0f,  1.0f);
-
-    glColor3f(faceColors[5].r, faceColors[5].g, faceColors[5].b);
-    glVertex3f(-1.0f, -1.0f, -1.0f);
-    glVertex3f(-1.0f, -1.0f,  1.0f);
-    glVertex3f(-1.0f,  1.0f,  1.0f);
-    glVertex3f(-1.0f,  1.0f, -1.0f);
-
-    glEnd();
+    for (int face = 0; face < 6; ++face) {
+        Vertex3 v0;
+        Vertex3 v1;
+        Vertex3 v2;
+        Vertex3 v3;
+        faceVertices(face, v0, v1, v2, v3);
+        Color c = faceColors[face];
+        bool hasTexture = faceTextures[face] != 0;
+        if (hasTexture) {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, faceTextures[face]);
+            glColor3f(1.0f, 1.0f, 1.0f);
+            glBegin(GL_QUADS);
+            glTexCoord2f(0.0f, 0.0f);
+            glVertex3f(v0.x, v0.y, v0.z);
+            glTexCoord2f(1.0f, 0.0f);
+            glVertex3f(v1.x, v1.y, v1.z);
+            glTexCoord2f(1.0f, 1.0f);
+            glVertex3f(v2.x, v2.y, v2.z);
+            glTexCoord2f(0.0f, 1.0f);
+            glVertex3f(v3.x, v3.y, v3.z);
+            glEnd();
+            glDisable(GL_TEXTURE_2D);
+        } else {
+            int pattern = facePatterns[face];
+            if (pattern == 0) {
+                glDisable(GL_TEXTURE_2D);
+                glColor3f(c.r, c.g, c.b);
+                glBegin(GL_QUADS);
+                glVertex3f(v0.x, v0.y, v0.z);
+                glVertex3f(v1.x, v1.y, v1.z);
+                glVertex3f(v2.x, v2.y, v2.z);
+                glVertex3f(v3.x, v3.y, v3.z);
+                glEnd();
+            } else {
+                GLuint tex = 0;
+                if (pattern == 1) {
+                    tex = stripesTexture;
+                } else if (pattern == 2) {
+                    tex = dotsTexture;
+                }
+                if (tex != 0) {
+                    glEnable(GL_TEXTURE_2D);
+                    glBindTexture(GL_TEXTURE_2D, tex);
+                    glColor3f(c.r, c.g, c.b);
+                    glBegin(GL_QUADS);
+                    glTexCoord2f(0.0f, 0.0f);
+                    glVertex3f(v0.x, v0.y, v0.z);
+                    glTexCoord2f(1.0f, 0.0f);
+                    glVertex3f(v1.x, v1.y, v1.z);
+                    glTexCoord2f(1.0f, 1.0f);
+                    glVertex3f(v2.x, v2.y, v2.z);
+                    glTexCoord2f(0.0f, 1.0f);
+                    glVertex3f(v3.x, v3.y, v3.z);
+                    glEnd();
+                    glDisable(GL_TEXTURE_2D);
+                } else {
+                    glDisable(GL_TEXTURE_2D);
+                    glColor3f(c.r, c.g, c.b);
+                    glBegin(GL_QUADS);
+                    glVertex3f(v0.x, v0.y, v0.z);
+                    glVertex3f(v1.x, v1.y, v1.z);
+                    glVertex3f(v2.x, v2.y, v2.z);
+                    glVertex3f(v3.x, v3.y, v3.z);
+                    glEnd();
+                }
+            }
+        }
+    }
     glPopMatrix();
 }
 
@@ -234,4 +392,49 @@ void Cubo::selectCurrentFace(int x, int y) {
     }
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+}
+
+void Cubo::initPatterns() {
+    if (stripesTexture == 0) {
+        stripesTexture = createStripeTexture();
+    }
+    if (dotsTexture == 0) {
+        dotsTexture = createDotsTexture();
+    }
+}
+
+void Cubo::setFacePattern(int face, int pattern) {
+    if (face < 0 || face >= 6) {
+        return;
+    }
+    if (pattern < 0) {
+        pattern = 0;
+    }
+    if (pattern > 2) {
+        pattern = 2;
+    }
+    facePatterns[face] = pattern;
+}
+
+int Cubo::getFacePattern(int face) const {
+    if (face < 0 || face >= 6) {
+        return 0;
+    }
+    return facePatterns[face];
+}
+
+bool Cubo::setFacePhotoFromFile(int face, const std::string& path) {
+    if (face < 0 || face >= 6) {
+        return false;
+    }
+    int width = 0;
+    int height = 0;
+    std::vector<unsigned char> data;
+    if (!loadPpm(path, width, height, data)) {
+        std::cerr << "Falha ao carregar imagem PPM: " << path << std::endl;
+        return false;
+    }
+    GLuint texId = createTextureFromData(width, height, data);
+    faceTextures[face] = texId;
+    return true;
 }

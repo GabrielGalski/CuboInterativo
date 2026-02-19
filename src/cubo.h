@@ -13,6 +13,7 @@
 #define CUBO_H
 
 #include <GL/glut.h>
+#include <string>
 
 struct Color {
     float r, g, b;
@@ -23,6 +24,10 @@ private:
     float rotX, rotY, rotZ;
     Color faceColors[6];
     int selectedFace;
+    int facePatterns[6];
+    GLuint faceTextures[6];
+    GLuint stripesTexture;
+    GLuint dotsTexture;
 
 public:
     Cubo();
@@ -35,6 +40,10 @@ public:
     int getSelectedFace() const { return selectedFace; }
     Color getFaceColor(int face) const { return faceColors[face]; }
     void setFaceColor(int face, float r, float g, float b);
+    void initPatterns();
+    void setFacePattern(int face, int pattern);
+    int getFacePattern(int face) const;
+    bool setFacePhotoFromFile(int face, const std::string& path);
 };
 
 #endif

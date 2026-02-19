@@ -56,10 +56,10 @@ bool LuaBridge::init() {
 
     luaL_openlibs(impl->L);
 
-    const char* files[] = {"background.lua", "mixer.lua", "controle.lua"};
+    const char* files[] = {"background.lua", "mixer.lua", "controle.lua", "faces.lua"};
     const char* prefixes[] = {"lua/", ""};
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         bool loaded = false;
         for (int p = 0; p < 2; p++) {
             std::string path = std::string(prefixes[p]) + files[i];
@@ -203,6 +203,43 @@ void LuaBridge::handleInput(Cubo& cube, unsigned char key) {
         lua_pop(impl->L, 3);
     } else {
         std::cerr << "Erro ao chamar processInput: "
+                  << lua_tostring(impl->L, -1) << std::endl;
+        lua_pop(impl->L, 1);
+    }
+}
+
+void LuaBridge::toggleFacePattern(Cubo& cube) {
+    if (!impl || !impl->L) return;
+    int faceIndex = cube.getSelectedFace();
+    lua_getglobal(impl->L, "toggleFacePattern");
+    if (!lua_isfunction(impl->L, -1)) {
+        std::cerr << "Função toggleFacePattern não encontrada!" << std::endl;
+        lua_pop(impl->L, 1);
+        return;
+    }
+    lua_pushinteger(impl->L, faceIndex);
+    if (lua_pcall(impl->L, 1, 1, 0) == LUA_OK) {
+        int pattern = (int)lua_tonumber(impl->L, -1);
+        lua_pop(impl->L, 1);
+        cube.setFacePattern(faceIndex, pattern);
+    } else {
+        std::cerr << "Erro ao chamar toggleFacePattern: "
+                  << lua_tostring(impl->L, -1) << std::endl;
+        lua_pop(impl->L, 1);
+    }
+}
+
+void LuaBridge::setFacePhoto(int faceIndex, const std::string& path) {
+    if (!impl || !impl->L) return;
+    lua_getglobal(impl->L, "setFacePhoto");
+    if (!lua_isfunction(impl->L, -1)) {
+        lua_pop(impl->L, 1);
+        return;
+    }
+    lua_pushinteger(impl->L, faceIndex);
+    lua_pushstring(impl->L, path.c_str());
+    if (lua_pcall(impl->L, 2, 0, 0) != LUA_OK) {
+        std::cerr << "Erro ao chamar setFacePhoto: "
                   << lua_tostring(impl->L, -1) << std::endl;
         lua_pop(impl->L, 1);
     }
