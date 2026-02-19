@@ -4,7 +4,7 @@ LDFLAGS = -lGL -lGLU -lglut $(shell pkg-config --libs lua5.4 || pkg-config --lib
 
 SRC_DIR = src
 OBJ_DIR = obj
-BIN = cube_editor
+BIN = cubo
 
 SRCS = $(wildcard $(SRC_DIR)/*.cpp)
 OBJS = $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
