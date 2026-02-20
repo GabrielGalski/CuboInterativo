@@ -27,6 +27,97 @@ function mixColors(r, g, b, ar, ag, ab)
     return newR, newG, newB
 end
 
+local mixState = {
+    mode = 0
+}
+
+local mixModeNames = {
+    [0] = "Aditiva",
+    [1] = "Subtrativa",
+    [2] = "Multiplicar",
+    [3] = "Screen",
+    [4] = "Lerp",
+    [5] = "HSV (Hue)"
+}
+
+local function clamp01(v)
+    if v < 0.0 then return 0.0 end
+    if v > 1.0 then return 1.0 end
+    return v
+end
+
+local function lerp(a, b, t)
+    return a + (b - a) * t
+end
+
+local function mixColorsMultiply(r, g, b, ar, ag, ab)
+    if r >= 0.99 and g >= 0.99 and b >= 0.99 then
+        return ar, ag, ab
+    end
+    return clamp01(r * ar), clamp01(g * ag), clamp01(b * ab)
+end
+
+local function mixColorsScreen(r, g, b, ar, ag, ab)
+    if r >= 0.99 and g >= 0.99 and b >= 0.99 then
+        return ar, ag, ab
+    end
+    local nr = 1.0 - (1.0 - r) * (1.0 - ar)
+    local ng = 1.0 - (1.0 - g) * (1.0 - ag)
+    local nb = 1.0 - (1.0 - b) * (1.0 - ab)
+    return clamp01(nr), clamp01(ng), clamp01(nb)
+end
+
+local function mixColorsLerp(r, g, b, ar, ag, ab)
+    if r >= 0.99 and g >= 0.99 and b >= 0.99 then
+        return ar, ag, ab
+    end
+    local t = 0.35
+    return clamp01(lerp(r, ar, t)), clamp01(lerp(g, ag, t)), clamp01(lerp(b, ab, t))
+end
+
+local function mixColorsHsvHue(r, g, b, ar, ag, ab)
+    if r >= 0.99 and g >= 0.99 and b >= 0.99 then
+        return ar, ag, ab
+    end
+    local h1, s1, v1 = rgbToHsv(r, g, b)
+    local h2, s2, v2 = rgbToHsv(ar, ag, ab)
+    local t = 0.25
+    local delta = ((h2 - h1 + 540) % 360) - 180
+    local h = (h1 + delta * t) % 360
+    local s = clamp01(lerp(s1, math.max(s1, s2), 0.25))
+    local v = clamp01(lerp(v1, math.max(v1, v2), 0.15))
+    return hsvToRgb(h, s, v)
+end
+
+function mixColorsMode(mode, r, g, b, ar, ag, ab)
+    if mode == 1 then
+        return mixColorsSubtractive(r, g, b, ar, ag, ab)
+    elseif mode == 2 then
+        return mixColorsMultiply(r, g, b, ar, ag, ab)
+    elseif mode == 3 then
+        return mixColorsScreen(r, g, b, ar, ag, ab)
+    elseif mode == 4 then
+        return mixColorsLerp(r, g, b, ar, ag, ab)
+    elseif mode == 5 then
+        return mixColorsHsvHue(r, g, b, ar, ag, ab)
+    else
+        return mixColors(r, g, b, ar, ag, ab)
+    end
+end
+
+function cycleMixMode()
+    mixState.mode = (mixState.mode + 1) % 6
+    return mixState.mode, mixModeNames[mixState.mode] or "?"
+end
+
+function getMixMode()
+    return mixState.mode, mixModeNames[mixState.mode] or "?"
+end
+
+function mixColorsCurrent(r, g, b, ar, ag, ab)
+    return mixColorsMode(mixState.mode, r, g, b, ar, ag, ab)
+end
+
 --[[
   Converte RGB (0–1) em HSV: H em graus (0–360), S e V em 0–1. Usado para
   manipulações no espaço HSV em futuras implementações (paletas, saturação).

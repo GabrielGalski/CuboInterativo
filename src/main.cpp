@@ -13,6 +13,7 @@
 #include <GL/glut.h>
 #include <cmath>
 #include <iostream>
+#include <string>
 #include "cubo.h"
 #include "background.h"
 #include "lua_bridge.h"
@@ -20,6 +21,41 @@
 Cubo cube;
 Background background;
 LuaBridge bridge;
+int windowWidth = 800;
+int windowHeight = 600;
+bool showControls = false;
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <commdlg.h>
+
+std::string openImageFileDialog() {
+    char fileName[MAX_PATH] = {0};
+    OPENFILENAMEA ofn;
+    ZeroMemory(&ofn, sizeof(ofn));
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = nullptr;
+    ofn.lpstrFile = fileName;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrFilter =
+        "Imagens\0*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff;*.ppm\0"
+        "Todos\0*.*\0";
+    ofn.nFilterIndex = 1;
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+    if (GetOpenFileNameA(&ofn)) {
+        return std::string(fileName);
+    }
+    return "";
+}
+#endif
+
+void drawText(float x, float y, const std::string& text) {
+    glRasterPos2f(x, y);
+    for (char ch : text) {
+        glutBitmapCharacter(GLUT_BITMAP_8_BY_13, ch);
+    }
+}
 
 /*
  * Desenha um frame completo: limpa cor e profundidade, obtém parâmetros do padrão
@@ -29,9 +65,6 @@ LuaBridge bridge;
  */
 void display() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    if (background.getModel() == 2) {
-        bridge.updateBackgroundPattern(background, glutGet(GLUT_ELAPSED_TIME));
-    }
     background.render();
 
     glMatrixMode(GL_MODELVIEW);
@@ -43,18 +76,71 @@ void display() {
     glMatrixMode(GL_PROJECTION);
     glPushMatrix();
     glLoadIdentity();
-    glOrtho(0, 1, 0, 1, -1, 1);
+    glOrtho(0, windowWidth, 0, windowHeight, -1, 1);
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
     glLoadIdentity();
+
+    float margin = 12.0f;
+    float btnW = 150.0f;
+    float btnH = 26.0f;
+    float x1 = windowWidth - margin - btnW;
+    float y1 = windowHeight - margin - btnH;
+    float x2 = windowWidth - margin;
+    float y2 = windowHeight - margin;
+
     glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glColor4f(0.10f, 0.10f, 0.12f, 0.65f);
     glBegin(GL_QUADS);
-    glColor4f(0.05f, 0.05f, 0.05f, 1.0f);
-    glVertex2f(0.8f, 0.0f);
-    glVertex2f(1.0f, 0.0f);
-    glVertex2f(1.0f, 1.0f);
-    glVertex2f(0.8f, 1.0f);
+    glVertex2f(x1, y1);
+    glVertex2f(x2, y1);
+    glVertex2f(x2, y2);
+    glVertex2f(x1, y2);
     glEnd();
+
+    glColor4f(0.85f, 0.85f, 0.88f, 0.9f);
+    drawText(x1 + 10.0f, y1 + 9.0f, "Controles");
+
+    if (showControls) {
+        float panelW = 320.0f;
+        float panelH = 170.0f;
+        float px2 = x2;
+        float py2 = y1 - 8.0f;
+        float px1 = px2 - panelW;
+        float py1 = py2 - panelH;
+
+        glColor4f(0.08f, 0.08f, 0.10f, 0.78f);
+        glBegin(GL_QUADS);
+        glVertex2f(px1, py1);
+        glVertex2f(px2, py1);
+        glVertex2f(px2, py2);
+        glVertex2f(px1, py2);
+        glEnd();
+
+        glColor4f(0.85f, 0.85f, 0.88f, 0.92f);
+        float tx = px1 + 10.0f;
+        float ty = py2 - 18.0f;
+        drawText(tx, ty, "Mouse: clique esq seleciona / dir limpa");
+        ty -= 16.0f;
+        drawText(tx, ty, "WASD: rotacionar cubo");
+        ty -= 16.0f;
+        drawText(tx, ty, "1-6: aplicar cor na face");
+        ty -= 16.0f;
+        drawText(tx, ty, "M: trocar modo de mistura");
+        ty -= 16.0f;
+        drawText(tx, ty, "F: trocar padrao da face");
+        ty -= 16.0f;
+        drawText(tx, ty, "P: colocar foto na face");
+        ty -= 16.0f;
+        drawText(tx, ty, "Setas: cor do fundo / modo fundo");
+        ty -= 16.0f;
+        drawText(tx, ty, "H: mostrar/ocultar esta ajuda");
+    }
+
+    glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
     glPopMatrix();
     glMatrixMode(GL_PROJECTION);
@@ -107,6 +193,41 @@ void keyboard(unsigned char key, int x, int y) {
             break;
         }
 
+        case '4': {
+            Color c = cube.getFaceColor(cube.getSelectedFace());
+            float nr, ng, nb;
+            bridge.mixColor(c.r, c.g, c.b, 0.0f, 1.0f, 1.0f, nr, ng, nb);
+            cube.setFaceColor(cube.getSelectedFace(), nr, ng, nb);
+            std::cout << "Adicionado ciano à face " << cube.getSelectedFace() << std::endl;
+            break;
+        }
+
+        case '5': {
+            Color c = cube.getFaceColor(cube.getSelectedFace());
+            float nr, ng, nb;
+            bridge.mixColor(c.r, c.g, c.b, 1.0f, 0.0f, 1.0f, nr, ng, nb);
+            cube.setFaceColor(cube.getSelectedFace(), nr, ng, nb);
+            std::cout << "Adicionado magenta à face " << cube.getSelectedFace() << std::endl;
+            break;
+        }
+
+        case '6': {
+            Color c = cube.getFaceColor(cube.getSelectedFace());
+            float nr, ng, nb;
+            bridge.mixColor(c.r, c.g, c.b, 1.0f, 1.0f, 0.0f, nr, ng, nb);
+            cube.setFaceColor(cube.getSelectedFace(), nr, ng, nb);
+            std::cout << "Adicionado amarelo à face " << cube.getSelectedFace() << std::endl;
+            break;
+        }
+
+        case 'm': case 'M': {
+            std::string name = bridge.cycleMixMode();
+            if (!name.empty()) {
+                std::cout << "Modo de mistura: " << name << std::endl;
+            }
+            break;
+        }
+
         case 'f': case 'F':
             bridge.toggleFacePattern(cube);
             std::cout << "Padrão da face " << cube.getSelectedFace() << " alterado para " << cube.getFacePattern(cube.getSelectedFace()) << std::endl;
@@ -114,9 +235,16 @@ void keyboard(unsigned char key, int x, int y) {
 
         case 'p': case 'P': {
             int face = cube.getSelectedFace();
-            std::cout << "Caminho da imagem PPM para a face " << face << ": ";
             std::string path;
+#ifdef _WIN32
+            path = openImageFileDialog();
+            if (path.empty()) {
+                break;
+            }
+#else
+            std::cout << "Caminho da imagem PPM para a face " << face << ": ";
             std::cin >> path;
+#endif
             if (cube.setFacePhotoFromFile(face, path)) {
                 bridge.setFacePhoto(face, path);
                 std::cout << "Foto aplicada na face " << face << std::endl;
@@ -129,6 +257,10 @@ void keyboard(unsigned char key, int x, int y) {
         case 'r': case 'R':
             cube.clearSelectedFace();
             std::cout << "Face resetada para branco" << std::endl;
+            break;
+
+        case 'h': case 'H':
+            showControls = !showControls;
             break;
 
         case 27:
@@ -176,6 +308,20 @@ void mouse(int button, int state, int x, int y) {
         return;
 
     if (button == GLUT_LEFT_BUTTON) {
+        float margin = 12.0f;
+        float btnW = 150.0f;
+        float btnH = 26.0f;
+        float x1 = windowWidth - margin - btnW;
+        float y1 = windowHeight - margin - btnH;
+        float x2 = windowWidth - margin;
+        float y2 = windowHeight - margin;
+        float mx = (float)x;
+        float my = (float)(windowHeight - y);
+        if (mx >= x1 && mx <= x2 && my >= y1 && my <= y2) {
+            showControls = !showControls;
+            glutPostRedisplay();
+            return;
+        }
         cube.selectCurrentFace(x, y);
         std::cout << "Click esquerdo em (" << x << ", " << y << ")" << std::endl;
     }
@@ -205,6 +351,7 @@ void init() {
     std::cout << "Lua inicializado com sucesso!" << std::endl;
 
     cube.setRotation(0.0f, 25.0f, 0.0f);
+    cube.initPatterns();
 
     background.setDefault();
 
@@ -220,12 +367,19 @@ void init() {
     std::cout << "  1 - Adicionar vermelho" << std::endl;
     std::cout << "  2 - Adicionar verde" << std::endl;
     std::cout << "  3 - Adicionar azul" << std::endl;
+    std::cout << "  4 - Adicionar ciano" << std::endl;
+    std::cout << "  5 - Adicionar magenta" << std::endl;
+    std::cout << "  6 - Adicionar amarelo" << std::endl;
+    std::cout << "  M - Trocar modo de mistura" << std::endl;
     std::cout << "  Click Direito - Limpar face (branco)" << std::endl;
     std::cout << "  R - Reset face atual" << std::endl;
+    std::cout << "  F - Trocar padrão da face" << std::endl;
+    std::cout << "  P - Colocar foto na face" << std::endl;
     std::cout << "\nBACKGROUND:" << std::endl;
     std::cout << "  Seta Esquerda/Direita - Mudar cor" << std::endl;
-    std::cout << "  Seta Cima - Alternar modo (sólido / gradiente / formas matemáticas)" << std::endl;
+    std::cout << "  Seta Cima - Alternar modo (sólido / espaço)" << std::endl;
     std::cout << "\nOUTRO:" << std::endl;
+    std::cout << "  H - Mostrar/ocultar ajuda" << std::endl;
     std::cout << "  ESC - Sair" << std::endl;
     std::cout << "========================================\n" << std::endl;
 }
@@ -237,6 +391,8 @@ void init() {
 void reshape(int w, int h) {
     if (h == 0) h = 1;
 
+    windowWidth = w;
+    windowHeight = h;
     glViewport(0, 0, w, h);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
@@ -251,7 +407,7 @@ void reshape(int w, int h) {
 int main(int argc, char** argv) {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
-    glutInitWindowSize(1200, 720);
+    glutInitWindowSize(800, 600);
     glutInitWindowPosition(100, 100);
     glutCreateWindow("Cube Editor - C++ & Lua Integration");
 

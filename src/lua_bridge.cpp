@@ -13,6 +13,7 @@
 #include "lua_bridge.h"
 #include "background.h"
 #include "cubo.h"
+#include <algorithm>
 #include <iostream>
 
 extern "C" {
@@ -109,33 +110,6 @@ void LuaBridge::updateBackground(Background& bg) {
 }
 
 /*
- * Chama getBackgroundPattern(timeMs) em Lua com o tempo em milissegundos,
- * esperando três retornos: tipo do padrão (1 Lissajous, 2 espiral, 3 ondas),
- * param1 e param2 (frequências ou parâmetros). Atualiza o background com
- * setPattern. Se a função não existir, apenas remove o valor da pilha e retorna.
- */
-void LuaBridge::updateBackgroundPattern(Background& bg, int timeMs) {
-    if (!impl || !impl->L) return;
-    lua_getglobal(impl->L, "getBackgroundPattern");
-    if (!lua_isfunction(impl->L, -1)) {
-        lua_pop(impl->L, 1);
-        return;
-    }
-    lua_pushinteger(impl->L, timeMs);
-    if (lua_pcall(impl->L, 1, 3, 0) == LUA_OK) {
-        float p2 = (float)lua_tonumber(impl->L, -1);
-        float p1 = (float)lua_tonumber(impl->L, -2);
-        int ptype = (int)lua_tonumber(impl->L, -3);
-        bg.setPattern(ptype, p1, p2);
-        lua_pop(impl->L, 3);
-    } else {
-        std::cerr << "Erro ao chamar getBackgroundPattern: "
-                  << lua_tostring(impl->L, -1) << std::endl;
-        lua_pop(impl->L, 1);
-    }
-}
-
-/*
  * Invoca mixColors(r, g, b, ar, ag, ab) em Lua com a cor atual e o incremento
  * (aditivo). Os três retornos são escritos em newR, newG, newB. Se a função
  * não existir ou pcall falhar, usa fallback: componente a componente min(1, c + ac).
@@ -148,9 +122,13 @@ void LuaBridge::mixColor(float r, float g, float b, float ar, float ag, float ab
         newB = std::min(1.0f, b + ab);
         return;
     }
-    lua_getglobal(impl->L, "mixColors");
+    lua_getglobal(impl->L, "mixColorsCurrent");
     if (!lua_isfunction(impl->L, -1)) {
-        std::cerr << "Função mixColors não encontrada!" << std::endl;
+        lua_pop(impl->L, 1);
+        lua_getglobal(impl->L, "mixColors");
+    }
+    if (!lua_isfunction(impl->L, -1)) {
+        std::cerr << "Função mixColorsCurrent/mixColors não encontrada!" << std::endl;
         lua_pop(impl->L, 1);
         newR = std::min(1.0f, r + ar);
         newG = std::min(1.0f, g + ag);
@@ -243,4 +221,23 @@ void LuaBridge::setFacePhoto(int faceIndex, const std::string& path) {
                   << lua_tostring(impl->L, -1) << std::endl;
         lua_pop(impl->L, 1);
     }
+}
+
+std::string LuaBridge::cycleMixMode() {
+    if (!impl || !impl->L) return "";
+    lua_getglobal(impl->L, "cycleMixMode");
+    if (!lua_isfunction(impl->L, -1)) {
+        lua_pop(impl->L, 1);
+        return "";
+    }
+    if (lua_pcall(impl->L, 0, 2, 0) == LUA_OK) {
+        const char* name = lua_tostring(impl->L, -1);
+        lua_pop(impl->L, 2);
+        if (!name) return "";
+        return std::string(name);
+    }
+    std::cerr << "Erro ao chamar cycleMixMode: "
+              << lua_tostring(impl->L, -1) << std::endl;
+    lua_pop(impl->L, 1);
+    return "";
 }

@@ -24,6 +24,93 @@ struct Vertex3 {
     float z;
 };
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <wincodec.h>
+
+struct ComInit {
+    HRESULT hr;
+    ComInit() : hr(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED)) {}
+    ~ComInit() {
+        if (SUCCEEDED(hr)) {
+            CoUninitialize();
+        }
+    }
+};
+
+bool loadImageWicRgb(const std::string& path, int& width, int& height, std::vector<unsigned char>& dataRgb) {
+    ComInit com;
+    if (FAILED(com.hr)) {
+        return false;
+    }
+
+    IWICImagingFactory* factory = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory));
+    if (FAILED(hr) || !factory) {
+        return false;
+    }
+
+    std::wstring wpath(path.begin(), path.end());
+    IWICBitmapDecoder* decoder = nullptr;
+    hr = factory->CreateDecoderFromFilename(wpath.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder);
+    if (FAILED(hr) || !decoder) {
+        factory->Release();
+        return false;
+    }
+
+    IWICBitmapFrameDecode* frame = nullptr;
+    hr = decoder->GetFrame(0, &frame);
+    if (FAILED(hr) || !frame) {
+        decoder->Release();
+        factory->Release();
+        return false;
+    }
+
+    UINT w = 0;
+    UINT h = 0;
+    hr = frame->GetSize(&w, &h);
+    if (FAILED(hr) || w == 0 || h == 0) {
+        frame->Release();
+        decoder->Release();
+        factory->Release();
+        return false;
+    }
+
+    IWICFormatConverter* converter = nullptr;
+    hr = factory->CreateFormatConverter(&converter);
+    if (FAILED(hr) || !converter) {
+        frame->Release();
+        decoder->Release();
+        factory->Release();
+        return false;
+    }
+
+    hr = converter->Initialize(frame, GUID_WICPixelFormat24bppRGB, WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom);
+    if (FAILED(hr)) {
+        converter->Release();
+        frame->Release();
+        decoder->Release();
+        factory->Release();
+        return false;
+    }
+
+    width = static_cast<int>(w);
+    height = static_cast<int>(h);
+    dataRgb.resize(static_cast<size_t>(width) * static_cast<size_t>(height) * 3u);
+    UINT stride = static_cast<UINT>(width * 3);
+    UINT bufferSize = static_cast<UINT>(dataRgb.size());
+    hr = converter->CopyPixels(nullptr, stride, bufferSize, dataRgb.data());
+
+    converter->Release();
+    frame->Release();
+    decoder->Release();
+    factory->Release();
+
+    return SUCCEEDED(hr);
+}
+#endif
+
 void faceVertices(int face, Vertex3& v0, Vertex3& v1, Vertex3& v2, Vertex3& v3) {
     if (face == 0) {
         v0 = {-1.0f, -1.0f,  1.0f};
@@ -88,6 +175,32 @@ bool loadPpm(const std::string& path, int& width, int& height, std::vector<unsig
         data[static_cast<size_t>(i) * 3u + 2u] = static_cast<unsigned char>(b * 255 / maxVal);
     }
     return true;
+}
+
+void cropCenterSquare(int& width, int& height, std::vector<unsigned char>& dataRgb) {
+    if (width <= 0 || height <= 0) return;
+    if (width == height) return;
+
+    int side = (width < height) ? width : height;
+    int x0 = (width - side) / 2;
+    int y0 = (height - side) / 2;
+
+    std::vector<unsigned char> cropped(static_cast<size_t>(side) * static_cast<size_t>(side) * 3u);
+    for (int y = 0; y < side; ++y) {
+        int srcY = y0 + y;
+        for (int x = 0; x < side; ++x) {
+            int srcX = x0 + x;
+            size_t src = (static_cast<size_t>(srcY) * static_cast<size_t>(width) + static_cast<size_t>(srcX)) * 3u;
+            size_t dst = (static_cast<size_t>(y) * static_cast<size_t>(side) + static_cast<size_t>(x)) * 3u;
+            cropped[dst + 0u] = dataRgb[src + 0u];
+            cropped[dst + 1u] = dataRgb[src + 1u];
+            cropped[dst + 2u] = dataRgb[src + 2u];
+        }
+    }
+
+    width = side;
+    height = side;
+    dataRgb.swap(cropped);
 }
 
 GLuint createTextureFromData(int width, int height, const std::vector<unsigned char>& data) {
@@ -430,10 +543,22 @@ bool Cubo::setFacePhotoFromFile(int face, const std::string& path) {
     int width = 0;
     int height = 0;
     std::vector<unsigned char> data;
+
+#ifdef _WIN32
+    if (!loadImageWicRgb(path, width, height, data)) {
+        if (!loadPpm(path, width, height, data)) {
+            std::cerr << "Falha ao carregar imagem: " << path << std::endl;
+            return false;
+        }
+    }
+#else
     if (!loadPpm(path, width, height, data)) {
         std::cerr << "Falha ao carregar imagem PPM: " << path << std::endl;
         return false;
     }
+#endif
+
+    cropCenterSquare(width, height, data);
     GLuint texId = createTextureFromData(width, height, data);
     faceTextures[face] = texId;
     return true;

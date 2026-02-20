@@ -13,12 +13,23 @@
 #include <GL/glut.h>
 #include <cmath>
 
+namespace {
+unsigned int lcg(unsigned int& state) {
+    state = state * 1664525u + 1013904223u;
+    return state;
+}
+
+float rand01(unsigned int& state) {
+    return (lcg(state) & 0x00FFFFFFu) / 16777215.0f;
+}
+}
+
 /*
  * Construtor: inicializa índice de cor e modo em 0, tipo de padrão 1 e
  * parâmetros padrão; preenche o vetor de cores com branco, preto, laranja,
  * rosa, azul escuro, vermelho escuro e verde escuro (RGB normalizado).
  */
-Background::Background() : currentColorIndex(0), currentModel(0), patternType(1), patternParam1(2.0f), patternParam2(3.0f) {
+Background::Background() : currentColorIndex(0), currentModel(0) {
     colors.push_back({1.0f, 1.0f, 1.0f});
     colors.push_back({0.0f, 0.0f, 0.0f});
     colors.push_back({1.0f, 0.5f, 0.0f});
@@ -26,6 +37,19 @@ Background::Background() : currentColorIndex(0), currentModel(0), patternType(1)
     colors.push_back({0.0f, 0.0f, 0.5f});
     colors.push_back({0.5f, 0.0f, 0.0f});
     colors.push_back({0.0f, 0.5f, 0.0f});
+
+    unsigned int seed = 1337u;
+    stars.reserve(420);
+    for (int i = 0; i < 420; ++i) {
+        Star s;
+        s.x = rand01(seed);
+        s.y = rand01(seed);
+        float depth = rand01(seed);
+        s.speed = 0.02f + depth * 0.10f;
+        s.brightness = 0.45f + (1.0f - depth) * 0.55f;
+        s.twinkle = rand01(seed) * 6.2831853f;
+        stars.push_back(s);
+    }
 }
 
 /*
@@ -65,52 +89,28 @@ void Background::render() {
         glVertex2f(1, 1);
         glVertex2f(0, 1);
         glEnd();
-    } else if (currentModel == 1) {
-        glBegin(GL_QUADS);
-        glColor3f(c.r * 0.5f, c.g * 0.5f, c.b * 0.5f);
-        glVertex2f(0, 0);
-        glVertex2f(1, 0);
-        glColor3f(c.r, c.g, c.b);
-        glVertex2f(1, 1);
-        glVertex2f(0, 1);
-        glEnd();
     } else {
         glBegin(GL_QUADS);
-        glColor3f(c.r * 0.2f, c.g * 0.2f, c.b * 0.2f);
+        glColor3f(0.01f, 0.01f, 0.03f);
         glVertex2f(0, 0);
         glVertex2f(1, 0);
         glVertex2f(1, 1);
         glVertex2f(0, 1);
         glEnd();
         float t = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
-        float cx = 0.5f, cy = 0.5f, scale = 0.4f;
-        int segments = 400;
-        glColor3f(c.r, c.g, c.b);
-        glLineWidth(1.5f);
-        glBegin(GL_LINE_STRIP);
-
-        if (patternType == 1) {
-            for (int i = 0; i <= segments; ++i) {
-                float u = (float)i / (float)segments * 2.0f * 3.14159265f + t;
-                float x = cx + scale * std::sin(patternParam1 * u);
-                float y = cy + scale * std::sin(patternParam2 * u);
-                glVertex2f(x, y);
-            }
-        } else if (patternType == 2) {
-            for (int i = 0; i <= segments; ++i) {
-                float u = (float)i / (float)segments * 4.0f * 3.14159265f + t * 0.5f;
-                float r = 0.15f + 0.25f * (u / (4.0f * 3.14159265f));
-                float x = cx + scale * r * std::cos(patternParam1 * u);
-                float y = cy + scale * r * std::sin(patternParam2 * u);
-                glVertex2f(x, y);
-            }
-        } else {
-            for (int i = 0; i <= segments; ++i) {
-                float u = (float)i / (float)segments * 2.0f * 3.14159265f;
-                float x = (float)i / (float)segments;
-                float y = 0.5f + 0.35f * std::sin(patternParam1 * (u + t)) * std::sin(patternParam2 * (u * 2.0f + t * 0.7f));
-                glVertex2f(x, y);
-            }
+        glPointSize(1.6f);
+        glBegin(GL_POINTS);
+        for (const Star& s : stars) {
+            float yy = s.y - std::fmod(t * s.speed, 1.0f);
+            if (yy < 0.0f) yy += 1.0f;
+            float drift = std::sin(t * 0.15f + s.twinkle) * 0.01f;
+            float xx = s.x + drift;
+            if (xx < 0.0f) xx += 1.0f;
+            if (xx > 1.0f) xx -= 1.0f;
+            float tw = 0.35f + 0.65f * (0.5f + 0.5f * std::sin(t * 2.0f + s.twinkle));
+            float b = s.brightness * tw;
+            glColor3f(b * 0.85f, b * 0.90f, b);
+            glVertex2f(xx, yy);
         }
         glEnd();
     }
@@ -142,7 +142,7 @@ void Background::previousColor() {
  * Cicla o modo de desenho: 0 -> 1 -> 2 -> 0 (sólido, gradiente, matemático).
  */
 void Background::nextModel() {
-    currentModel = (currentModel + 1) % 3;
+    currentModel = (currentModel + 1) % 2;
 }
 
 /*
@@ -160,18 +160,7 @@ void Background::setColorIndex(int index) {
  * ignorados.
  */
 void Background::setModel(int model) {
-    if (model >= 0 && model <= 2) {
+    if (model >= 0 && model <= 1) {
         currentModel = model;
     }
-}
-
-/*
- * Atualiza o tipo e os dois parâmetros do padrão matemático (modo 2).
- * Tipo 1: Lissajous; 2: espiral; 3: onda. Os parâmetros são usados como
- * frequências ou escalas nas fórmulas de render.
- */
-void Background::setPattern(int type, float param1, float param2) {
-    patternType = type;
-    patternParam1 = param1;
-    patternParam2 = param2;
 }

@@ -20,12 +20,18 @@ struct BgColor {
 
 class Background {
 private:
+    struct Star {
+        float x;
+        float y;
+        float speed;
+        float brightness;
+        float twinkle;
+    };
+
     int currentColorIndex;
     int currentModel;
-    int patternType;
-    float patternParam1;
-    float patternParam2;
     std::vector<BgColor> colors;
+    std::vector<Star> stars;
 
 public:
     Background();
@@ -36,7 +42,6 @@ public:
     void nextModel();
     void setColorIndex(int index);
     void setModel(int model);
-    void setPattern(int type, float param1, float param2);
     int getModel() const { return currentModel; }
 };
 
