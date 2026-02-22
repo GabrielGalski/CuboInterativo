@@ -1,4 +1,0 @@
-CompileFlags:
-  Add:
-    - -I/usr/include/lua5.4
-  Remove: []
