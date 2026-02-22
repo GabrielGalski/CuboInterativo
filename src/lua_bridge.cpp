@@ -223,21 +223,61 @@ void LuaBridge::setFacePhoto(int faceIndex, const std::string& path) {
     }
 }
 
-std::string LuaBridge::cycleMixMode() {
-    if (!impl || !impl->L) return "";
-    lua_getglobal(impl->L, "cycleMixMode");
+// cycleMixMode removed — single additive mixing mode only
+
+/*
+ * Chama initStars(count) em Lua para gerar a tabela de estrelas com o LCG
+ * determinístico. Deve ser chamada uma vez após bridge.init().
+ */
+void LuaBridge::initStars(int count) {
+    if (!impl || !impl->L) return;
+    lua_getglobal(impl->L, "initStars");
+    if (!lua_isfunction(impl->L, -1)) {
+        std::cerr << "Função initStars não encontrada!" << std::endl;
+        lua_pop(impl->L, 1);
+        return;
+    }
+    lua_pushinteger(impl->L, count);
+    if (lua_pcall(impl->L, 1, 0, 0) != LUA_OK) {
+        std::cerr << "Erro em initStars: " << lua_tostring(impl->L, -1) << std::endl;
+        lua_pop(impl->L, 1);
+    }
+}
+
+/*
+ * Chama getStarPositions(t) em Lua e lê a tabela flat retornada.
+ * Cada estrela ocupa 5 entradas consecutivas: x, y, r, g, b.
+ * O vetor 'out' é redimensionado e preenchido com esses valores.
+ */
+void LuaBridge::getStarPositions(float t, std::vector<float>& out) {
+    out.clear();
+    if (!impl || !impl->L) return;
+
+    lua_getglobal(impl->L, "getStarPositions");
     if (!lua_isfunction(impl->L, -1)) {
         lua_pop(impl->L, 1);
-        return "";
+        return;
     }
-    if (lua_pcall(impl->L, 0, 2, 0) == LUA_OK) {
-        const char* name = lua_tostring(impl->L, -1);
-        lua_pop(impl->L, 2);
-        if (!name) return "";
-        return std::string(name);
+    lua_pushnumber(impl->L, t);
+    if (lua_pcall(impl->L, 1, 1, 0) != LUA_OK) {
+        std::cerr << "Erro em getStarPositions: "
+                  << lua_tostring(impl->L, -1) << std::endl;
+        lua_pop(impl->L, 1);
+        return;
     }
-    std::cerr << "Erro ao chamar cycleMixMode: "
-              << lua_tostring(impl->L, -1) << std::endl;
-    lua_pop(impl->L, 1);
-    return "";
+
+    if (!lua_istable(impl->L, -1)) {
+        lua_pop(impl->L, 1);
+        return;
+    }
+
+    int n = (int)lua_rawlen(impl->L, -1);
+    out.reserve(n);
+    for (int i = 1; i <= n; ++i) {
+        lua_rawgeti(impl->L, -1, i);
+        out.push_back((float)lua_tonumber(impl->L, -1));
+        lua_pop(impl->L, 1);
+    }
+
+    lua_pop(impl->L, 1);   // remove a tabela da pilha
 }

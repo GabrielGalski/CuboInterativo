@@ -17,6 +17,16 @@
 #include <fstream>
 #include <sstream>
 
+// stb_image: suporte a PNG, JPG, BMP, TGA, GIF, etc.
+// Baixe em: https://raw.githubusercontent.com/nothings/stb/master/stb_image.h
+#if __has_include("stb_image.h")
+    #define STB_IMAGE_IMPLEMENTATION
+    #include "stb_image.h"
+    #define HAS_STB_IMAGE 1
+#else
+    #define HAS_STB_IMAGE 0
+#endif
+
 namespace {
 struct Vertex3 {
     float x;
@@ -263,6 +273,7 @@ Cubo::Cubo() : rotX(0), rotY(0), rotZ(0), selectedFace(0), stripesTexture(0), do
         faceColors[i] = {1.0f, 1.0f, 1.0f};
         facePatterns[i] = 0;
         faceTextures[i] = 0;
+        faceTextureHasAlpha[i] = false;
     }
 }
 
@@ -286,20 +297,44 @@ void Cubo::render() {
         Color c = faceColors[face];
         bool hasTexture = faceTextures[face] != 0;
         if (hasTexture) {
-            glEnable(GL_TEXTURE_2D);
-            glBindTexture(GL_TEXTURE_2D, faceTextures[face]);
-            glColor3f(1.0f, 1.0f, 1.0f);
-            glBegin(GL_QUADS);
-            glTexCoord2f(0.0f, 0.0f);
-            glVertex3f(v0.x, v0.y, v0.z);
-            glTexCoord2f(1.0f, 0.0f);
-            glVertex3f(v1.x, v1.y, v1.z);
-            glTexCoord2f(1.0f, 1.0f);
-            glVertex3f(v2.x, v2.y, v2.z);
-            glTexCoord2f(0.0f, 1.0f);
-            glVertex3f(v3.x, v3.y, v3.z);
-            glEnd();
-            glDisable(GL_TEXTURE_2D);
+            // Se a textura tem canal alpha (PNG transparente), desenha a cor
+            // da face primeiro e sobrepõe a textura com blending
+            if (faceTextureHasAlpha[face]) {
+                glDisable(GL_TEXTURE_2D);
+                Color c = faceColors[face];
+                glColor3f(c.r, c.g, c.b);
+                glBegin(GL_QUADS);
+                glVertex3f(v0.x, v0.y, v0.z);
+                glVertex3f(v1.x, v1.y, v1.z);
+                glVertex3f(v2.x, v2.y, v2.z);
+                glVertex3f(v3.x, v3.y, v3.z);
+                glEnd();
+
+                glEnable(GL_TEXTURE_2D);
+                glBindTexture(GL_TEXTURE_2D, faceTextures[face]);
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+                glBegin(GL_QUADS);
+                glTexCoord2f(0.0f, 0.0f); glVertex3f(v0.x, v0.y, v0.z);
+                glTexCoord2f(1.0f, 0.0f); glVertex3f(v1.x, v1.y, v1.z);
+                glTexCoord2f(1.0f, 1.0f); glVertex3f(v2.x, v2.y, v2.z);
+                glTexCoord2f(0.0f, 1.0f); glVertex3f(v3.x, v3.y, v3.z);
+                glEnd();
+                glDisable(GL_BLEND);
+                glDisable(GL_TEXTURE_2D);
+            } else {
+                glEnable(GL_TEXTURE_2D);
+                glBindTexture(GL_TEXTURE_2D, faceTextures[face]);
+                glColor3f(1.0f, 1.0f, 1.0f);
+                glBegin(GL_QUADS);
+                glTexCoord2f(0.0f, 0.0f); glVertex3f(v0.x, v0.y, v0.z);
+                glTexCoord2f(1.0f, 0.0f); glVertex3f(v1.x, v1.y, v1.z);
+                glTexCoord2f(1.0f, 1.0f); glVertex3f(v2.x, v2.y, v2.z);
+                glTexCoord2f(0.0f, 1.0f); glVertex3f(v3.x, v3.y, v3.z);
+                glEnd();
+                glDisable(GL_TEXTURE_2D);
+            }
         } else {
             int pattern = facePatterns[face];
             if (pattern == 0) {
@@ -543,23 +578,103 @@ bool Cubo::setFacePhotoFromFile(int face, const std::string& path) {
     int width = 0;
     int height = 0;
     std::vector<unsigned char> data;
+    bool hasAlpha = false;
+    bool loaded   = false;
 
-#ifdef _WIN32
-    if (!loadImageWicRgb(path, width, height, data)) {
-        if (!loadPpm(path, width, height, data)) {
-            std::cerr << "Falha ao carregar imagem: " << path << std::endl;
-            return false;
+#if HAS_STB_IMAGE
+    {
+        int channels = 0;
+        // Sempre carrega RGBA para preservar canal alpha de PNGs transparentes
+        unsigned char* raw = stbi_load(path.c_str(), &width, &height, &channels, 0);
+        if (raw) {
+            size_t pixels = static_cast<size_t>(width) * static_cast<size_t>(height);
+            if (channels == 4) {
+                // Verifica se há pixels semi-transparentes
+                hasAlpha = false;
+                for (size_t i = 0; i < pixels; ++i) {
+                    if (raw[i * 4 + 3] < 255) {
+                        hasAlpha = true;
+                        break;
+                    }
+                }
+                data.assign(raw, raw + pixels * 4);
+            } else if (channels == 3) {
+                data.assign(raw, raw + pixels * 3);
+                hasAlpha = false;
+            } else {
+                // Grayscale ou outros: converte para RGB
+                data.resize(pixels * 3);
+                for (size_t i = 0; i < pixels; ++i) {
+                    unsigned char v = raw[i * static_cast<size_t>(channels)];
+                    data[i * 3 + 0] = v;
+                    data[i * 3 + 1] = v;
+                    data[i * 3 + 2] = v;
+                }
+            }
+            stbi_image_free(raw);
+            loaded = true;
+        } else {
+            std::cerr << "stb_image falhou: " << stbi_failure_reason() << std::endl;
         }
-    }
-#else
-    if (!loadPpm(path, width, height, data)) {
-        std::cerr << "Falha ao carregar imagem PPM: " << path << std::endl;
-        return false;
     }
 #endif
 
-    cropCenterSquare(width, height, data);
-    GLuint texId = createTextureFromData(width, height, data);
+    if (!loaded) {
+        // Fallback PPM (sem alpha)
+        loaded   = loadPpm(path, width, height, data);
+        hasAlpha = false;
+    }
+
+    if (!loaded) {
+        std::cerr << "Falha ao carregar imagem: " << path << std::endl;
+        return false;
+    }
+
+    // Remove textura anterior se existir
+    if (faceTextures[face] != 0) {
+        glDeleteTextures(1, &faceTextures[face]);
+        faceTextures[face] = 0;
+    }
+
+    // Crop quadrado central (operamos em RGB ou RGBA)
+    if (hasAlpha) {
+        // cropCenterSquare opera em RGB (3 bytes), adaptar para RGBA
+        if (width != height) {
+            int side = (width < height) ? width : height;
+            int x0 = (width - side) / 2;
+            int y0 = (height - side) / 2;
+            std::vector<unsigned char> cropped(static_cast<size_t>(side) * static_cast<size_t>(side) * 4u);
+            for (int y = 0; y < side; ++y) {
+                for (int x = 0; x < side; ++x) {
+                    size_t src = (static_cast<size_t>(y0 + y) * static_cast<size_t>(width) + static_cast<size_t>(x0 + x)) * 4u;
+                    size_t dst = (static_cast<size_t>(y) * static_cast<size_t>(side) + static_cast<size_t>(x)) * 4u;
+                    cropped[dst+0] = data[src+0];
+                    cropped[dst+1] = data[src+1];
+                    cropped[dst+2] = data[src+2];
+                    cropped[dst+3] = data[src+3];
+                }
+            }
+            width = side; height = side;
+            data.swap(cropped);
+        }
+    } else {
+        cropCenterSquare(width, height, data);
+    }
+
+    GLuint texId = 0;
+    glGenTextures(1, &texId);
+    glBindTexture(GL_TEXTURE_2D, texId);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    if (hasAlpha) {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data.data());
+    } else {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data.data());
+    }
+
     faceTextures[face] = texId;
+    faceTextureHasAlpha[face] = hasAlpha;
     return true;
 }

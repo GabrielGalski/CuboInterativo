@@ -26,6 +26,7 @@ private:
     int selectedFace;
     int facePatterns[6];
     GLuint faceTextures[6];
+    bool faceTextureHasAlpha[6];
     GLuint stripesTexture;
     GLuint dotsTexture;
 

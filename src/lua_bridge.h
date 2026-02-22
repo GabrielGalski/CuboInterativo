@@ -15,6 +15,7 @@
 #define LUA_BRIDGE_H
 
 #include <string>
+#include <vector>
 
 struct LuaBridgeImpl;
 
@@ -35,7 +36,11 @@ public:
     void handleInput(Cubo& cube, unsigned char key);
     void toggleFacePattern(Cubo& cube);
     void setFacePhoto(int faceIndex, const std::string& path);
-    std::string cycleMixMode();
+
+    // Partículas de estrela delegadas ao Lua
+    void initStars(int count);
+    // Preenche 'out' com pacotes de 5 floats por estrela: x, y, r, g, b
+    void getStarPositions(float t, std::vector<float>& out);
 };
 
 #endif

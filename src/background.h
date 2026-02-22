@@ -1,12 +1,10 @@
 /*
  * background.h
  *
- * Declaração da classe Background e da estrutura BgColor. O background pode ser
- * desenhado em três modos: sólido (um quad com a cor atual), gradiente vertical
- * (escuro na base, cor no topo) ou formas matemáticas dinâmicas (Lissajous,
- * espiral, ondas), com parâmetros fornecidos pelo Lua. Mantém um vetor de cores
- * fixas e índices para cor atual, modo e parâmetros do padrão (tipo e dois floats).
- * Os getters/setters permitem integração com o LuaBridge e controle por teclado.
+ * Background sempre estrelado. A geração e animação das estrelas vivem em
+ * background.lua (via LuaBridge). Background::render() chama
+ * bridge->getStarPositions(t) e desenha os pontos com GL_POINTS.
+ * Nenhuma lógica de partícula existe em C++ — apenas o desenho OpenGL.
  */
 
 #ifndef BACKGROUND_H
@@ -14,35 +12,26 @@
 
 #include <vector>
 
-struct BgColor {
-    float r, g, b;
-};
+class LuaBridge;   // forward declaration — evita include circular
 
 class Background {
 private:
-    struct Star {
-        float x;
-        float y;
-        float speed;
-        float brightness;
-        float twinkle;
-    };
-
-    int currentColorIndex;
-    int currentModel;
-    std::vector<BgColor> colors;
-    std::vector<Star> stars;
+    int         currentColorIndex;
+    int         currentModel;
+    LuaBridge*  bridge;            // ponteiro para o bridge Lua (não owned)
+    std::vector<float> starCache;  // buffer reutilizável para os dados de estrela
 
 public:
-    Background();
+    explicit Background(LuaBridge* b = nullptr);
     void setDefault();
+    void setBridge(LuaBridge* b) { bridge = b; }
     void render();
     void nextColor();
     void previousColor();
     void nextModel();
     void setColorIndex(int index);
     void setModel(int model);
-    int getModel() const { return currentModel; }
+    int  getModel() const { return currentModel; }
 };
 
 #endif
