@@ -221,7 +221,10 @@ GLuint createTextureFromData(int width, int height, const std::vector<unsigned c
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    // Garante alinhamento de 1 byte para imagens RGB com largura arbitrária
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data.data());
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4); // restaura padrão
     return texId;
 }
 
@@ -270,10 +273,12 @@ GLuint createDotsTexture() {
  */
 Cubo::Cubo() : rotX(0), rotY(0), rotZ(0), selectedFace(0), stripesTexture(0), dotsTexture(0) {
     for (int i = 0; i < 6; ++i) {
-        faceColors[i] = {1.0f, 1.0f, 1.0f};
-        facePatterns[i] = 0;
-        faceTextures[i] = 0;
-        faceTextureHasAlpha[i] = false;
+        faceColors[i]           = {1.0f, 1.0f, 1.0f};
+        facePatterns[i]         = 0;
+        faceTextures[i]         = 0;
+        faceTextureHasAlpha[i]  = false;
+        faceTextureScale[i]     = 1.0f;
+        faceTextureRotation[i]  = 0;
     }
 }
 
@@ -296,45 +301,82 @@ void Cubo::render() {
         faceVertices(face, v0, v1, v2, v3);
         Color c = faceColors[face];
         bool hasTexture = faceTextures[face] != 0;
-        if (hasTexture) {
-            // Se a textura tem canal alpha (PNG transparente), desenha a cor
-            // da face primeiro e sobrepõe a textura com blending
-            if (faceTextureHasAlpha[face]) {
-                glDisable(GL_TEXTURE_2D);
-                Color c = faceColors[face];
-                glColor3f(c.r, c.g, c.b);
-                glBegin(GL_QUADS);
-                glVertex3f(v0.x, v0.y, v0.z);
-                glVertex3f(v1.x, v1.y, v1.z);
-                glVertex3f(v2.x, v2.y, v2.z);
-                glVertex3f(v3.x, v3.y, v3.z);
-                glEnd();
 
-                glEnable(GL_TEXTURE_2D);
-                glBindTexture(GL_TEXTURE_2D, faceTextures[face]);
-                glEnable(GL_BLEND);
-                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+        if (hasTexture) {
+            float scale = faceTextureScale[face];
+            int   rot   = faceTextureRotation[face]; // 0-3: passos de 90° CW
+
+            // Tabela de UVs por rotação para os 4 vértices (v0=BL,v1=BR,v2=TR,v3=TL).
+            // Cada linha é {u0,v0, u1,v1, u2,v2, u3,v3}.
+            // rot 0=normal, 1=90°CW, 2=180°, 3=270°CW
+            static const float uvTable[4][8] = {
+                {0,0, 1,0, 1,1, 0,1},  // 0°
+                {1,0, 1,1, 0,1, 0,0},  // 90° CW
+                {1,1, 0,1, 0,0, 1,0},  // 180°
+                {0,1, 0,0, 1,0, 1,1},  // 270° CW
+            };
+            const float* uv = uvTable[rot & 3];
+
+            // Ajusta UVs para zoom-in: [0,1] → [uvMin, uvMax]
+            auto mapUV = [&](float u, float v, float lo, float hi) -> std::pair<float,float> {
+                return { lo + u * (hi - lo), lo + v * (hi - lo) };
+            };
+
+            // ── Passo 1: cor sólida de fundo ─────────────────────────────────
+            glDisable(GL_TEXTURE_2D);
+            glColor3f(c.r, c.g, c.b);
+            glBegin(GL_QUADS);
+            glVertex3f(v0.x, v0.y, v0.z);
+            glVertex3f(v1.x, v1.y, v1.z);
+            glVertex3f(v2.x, v2.y, v2.z);
+            glVertex3f(v3.x, v3.y, v3.z);
+            glEnd();
+
+            // ── Passo 2: textura com rotação + escala ────────────────────────
+            glEnable(GL_POLYGON_OFFSET_FILL);
+            glPolygonOffset(-1.0f, -1.0f);
+            glDepthFunc(GL_LEQUAL);
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, faceTextures[face]);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+
+            if (scale >= 1.0f) {
+                // Zoom in: UV range encolhe ao redor do centro
+                float lo = 0.5f - 0.5f / scale;
+                float hi = 0.5f + 0.5f / scale;
+                auto [u0,v0uv] = mapUV(uv[0], uv[1], lo, hi);
+                auto [u1,v1uv] = mapUV(uv[2], uv[3], lo, hi);
+                auto [u2,v2uv] = mapUV(uv[4], uv[5], lo, hi);
+                auto [u3,v3uv] = mapUV(uv[6], uv[7], lo, hi);
                 glBegin(GL_QUADS);
-                glTexCoord2f(0.0f, 0.0f); glVertex3f(v0.x, v0.y, v0.z);
-                glTexCoord2f(1.0f, 0.0f); glVertex3f(v1.x, v1.y, v1.z);
-                glTexCoord2f(1.0f, 1.0f); glVertex3f(v2.x, v2.y, v2.z);
-                glTexCoord2f(0.0f, 1.0f); glVertex3f(v3.x, v3.y, v3.z);
+                glTexCoord2f(u0,v0uv); glVertex3f(v0.x, v0.y, v0.z);
+                glTexCoord2f(u1,v1uv); glVertex3f(v1.x, v1.y, v1.z);
+                glTexCoord2f(u2,v2uv); glVertex3f(v2.x, v2.y, v2.z);
+                glTexCoord2f(u3,v3uv); glVertex3f(v3.x, v3.y, v3.z);
                 glEnd();
-                glDisable(GL_BLEND);
-                glDisable(GL_TEXTURE_2D);
             } else {
-                glEnable(GL_TEXTURE_2D);
-                glBindTexture(GL_TEXTURE_2D, faceTextures[face]);
-                glColor3f(1.0f, 1.0f, 1.0f);
+                // Zoom out: vértices encolhem, UV normal (com rotação)
+                float cx2 = (v0.x+v1.x+v2.x+v3.x)*0.25f;
+                float cy2 = (v0.y+v1.y+v2.y+v3.y)*0.25f;
+                float cz2 = (v0.z+v1.z+v2.z+v3.z)*0.25f;
+                auto sv = [&](const Vertex3& v) -> Vertex3 {
+                    return { cx2+(v.x-cx2)*scale, cy2+(v.y-cy2)*scale, cz2+(v.z-cz2)*scale };
+                };
+                Vertex3 sv0=sv(v0), sv1=sv(v1), sv2=sv(v2), sv3=sv(v3);
                 glBegin(GL_QUADS);
-                glTexCoord2f(0.0f, 0.0f); glVertex3f(v0.x, v0.y, v0.z);
-                glTexCoord2f(1.0f, 0.0f); glVertex3f(v1.x, v1.y, v1.z);
-                glTexCoord2f(1.0f, 1.0f); glVertex3f(v2.x, v2.y, v2.z);
-                glTexCoord2f(0.0f, 1.0f); glVertex3f(v3.x, v3.y, v3.z);
+                glTexCoord2f(uv[0],uv[1]); glVertex3f(sv0.x,sv0.y,sv0.z);
+                glTexCoord2f(uv[2],uv[3]); glVertex3f(sv1.x,sv1.y,sv1.z);
+                glTexCoord2f(uv[4],uv[5]); glVertex3f(sv2.x,sv2.y,sv2.z);
+                glTexCoord2f(uv[6],uv[7]); glVertex3f(sv3.x,sv3.y,sv3.z);
                 glEnd();
-                glDisable(GL_TEXTURE_2D);
             }
+
+            glDisable(GL_BLEND);
+            glDisable(GL_TEXTURE_2D);
+            glDisable(GL_POLYGON_OFFSET_FILL);
+            glDepthFunc(GL_LESS);
         } else {
             int pattern = facePatterns[face];
             if (pattern == 0) {
@@ -668,13 +710,39 @@ bool Cubo::setFacePhotoFromFile(int face, const std::string& path) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    // Alinhamento de 1 byte obrigatório para imagens com stride arbitrário
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     if (hasAlpha) {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data.data());
     } else {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data.data());
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB,  width, height, 0, GL_RGB,  GL_UNSIGNED_BYTE, data.data());
     }
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4); // restaura padrão
 
-    faceTextures[face] = texId;
+    faceTextures[face]        = texId;
     faceTextureHasAlpha[face] = hasAlpha;
+    faceTextureScale[face]    = 1.0f;   // reseta zoom ao carregar nova imagem
+    faceTextureRotation[face] = 0;      // reseta rotação ao carregar nova imagem
     return true;
+}
+
+/*
+ * Define o fator de escala da textura de uma face.
+ * Clampado a [0.1, 4.0].
+ */
+void Cubo::setFaceTextureScale(int face, float s) {
+    if (face < 0 || face >= 6) return;
+    if (s < 0.1f) s = 0.1f;
+    if (s > 4.0f) s = 4.0f;
+    faceTextureScale[face] = s;
+}
+
+/*
+ * Rotaciona a textura da face em passos de 90°.
+ * delta = +1 → 90° no sentido horário; delta = -1 → sentido anti-horário.
+ * O valor é mantido no intervalo [0, 3] com módulo circular.
+ */
+void Cubo::rotateFaceTexture(int face, int delta) {
+    if (face < 0 || face >= 6) return;
+    faceTextureRotation[face] = ((faceTextureRotation[face] + delta) % 4 + 4) % 4;
 }

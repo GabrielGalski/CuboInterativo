@@ -1,5 +1,7 @@
 #include <GL/glut.h>
 #include <cmath>
+#include <cstring>
+#include <cstdio>
 #include <iostream>
 #include <string>
 #include "cubo.h"
@@ -117,21 +119,52 @@ void drawSplash() {
     ty -= 18.0f;
     drawText(tx, ty, "Click esq    Selecionar face");
     ty -= 18.0f;
-    drawText(tx, ty, "1            Vermelho");
-    ty -= 18.0f;
-    drawText(tx, ty, "2            Azul");
-    ty -= 18.0f;
-    drawText(tx, ty, "3            Verde");
+    drawText(tx, ty, "1-Verm  2-Azul  3-Verde  4-Preto");
     ty -= 18.0f;
     drawText(tx, ty, "R            Limpar face");
     ty -= 18.0f;
     drawText(tx, ty, "Backspace    Imagem na face");
+    ty -= 18.0f;
+    drawText(tx, ty, "Seta Cima/Baixo  Zoom imagem");
+    ty -= 18.0f;
+    drawText(tx, ty, "Seta Esq/Dir     Girar imagem");
     ty -= 26.0f;
     glColor4f(0.5f, 0.8f, 0.5f, 0.85f);
     drawText(px1 + pw * 0.5f - 80.0f, ty, "Pressione qualquer tecla para comecar");
 
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
+
+    // ── Indicador de zoom/rotação (se face tem imagem) ───────────────────────
+    {
+        int face = cube.getSelectedFace();
+        if (cube.faceHasTexture(face)) {
+            float s   = cube.getFaceTextureScale(face);
+            int   deg = cube.getFaceTextureRotation(face) * 90;
+            char buf[80];
+            std::snprintf(buf, sizeof(buf),
+                "Face %d | Zoom: %.1fx | Rot: %d°  [↑/↓ zoom  ←/→ girar]", face, s, deg);
+
+            glDisable(GL_DEPTH_TEST);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+            float tw2 = (float)(std::strlen(buf) * 8 + 20);
+            float bx1 = 10.0f, by1 = 10.0f;
+            float bx2 = bx1 + tw2, by2 = by1 + 22.0f;
+            glColor4f(0.05f, 0.05f, 0.10f, 0.72f);
+            glBegin(GL_QUADS);
+            glVertex2f(bx1,by1); glVertex2f(bx2,by1);
+            glVertex2f(bx2,by2); glVertex2f(bx1,by2);
+            glEnd();
+
+            glColor4f(0.85f, 0.95f, 0.65f, 0.95f);
+            drawText(bx1 + 10.0f, by1 + 6.0f, buf);
+
+            glDisable(GL_BLEND);
+            glEnable(GL_DEPTH_TEST);
+        }
+    }
 
     glPopMatrix();
     glMatrixMode(GL_PROJECTION);
@@ -174,10 +207,10 @@ void display() {
         glEnd();
 
         glColor4f(0.85f, 0.85f, 0.88f, 0.9f);
-        drawText(x1 + 10.0f, y1 + 9.0f, "Controles [H]");
+        drawText(x1 + 10.0f, y1 + 9.0f, "Controles");
 
         if (showControls) {
-            float panelW = 300.0f, panelH = 170.0f;
+            float panelW = 300.0f, panelH = 200.0f;
             float px2 = x2, py2 = y1 - 8.0f;
             float px1 = px2 - panelW, py1 = py2 - panelH;
 
@@ -189,12 +222,14 @@ void display() {
 
             glColor4f(0.85f, 0.85f, 0.88f, 0.92f);
             float tx = px1 + 10.0f, ty = py2 - 18.0f;
-            drawText(tx, ty, "Click esq: seleciona face");   ty -= 16.0f;
-            drawText(tx, ty, "Click dir: limpa face");       ty -= 16.0f;
-            drawText(tx, ty, "WASD: rodar cubo");            ty -= 16.0f;
-            drawText(tx, ty, "1 - Vermelho  2 - Azul  3 - Verde"); ty -= 16.0f;
-            drawText(tx, ty, "R: resetar face");             ty -= 16.0f;
-            drawText(tx, ty, "Backspace: foto na face");     ty -= 16.0f;
+            drawText(tx, ty, "Mouse esq: seleciona face");    ty -= 16.0f;
+            drawText(tx, ty, "Mouse dir: remove cor");        ty -= 16.0f;
+            drawText(tx, ty, "WASD: rodar cubo");             ty -= 16.0f;
+            drawText(tx, ty, "1-Verm  2-Azul  3-Verde  4-Preto"); ty -= 16.0f;
+            drawText(tx, ty, "Seta Cima/Baixo: zoom imagem"); ty -= 16.0f;
+            drawText(tx, ty, "Seta esq/dir: girar imagem");   ty -= 16.0f;
+            drawText(tx, ty, "R: resetar face");              ty -= 16.0f;
+            drawText(tx, ty, "Backspace: adicionar foto");      ty -= 16.0f;
             drawText(tx, ty, "ESC: sair");
         }
 
@@ -250,6 +285,9 @@ void keyboard(unsigned char key, int x, int y) {
             cube.setFaceColor(cube.getSelectedFace(), nr, ng, nb);
             break;
         }
+        case '4':   // Preto — aplica direto (mistura não faz sentido para preto)
+            cube.setFaceColor(cube.getSelectedFace(), 0.0f, 0.0f, 0.0f);
+            break;
 
         case 8: case 127: {   // Backspace / Delete
             int face = cube.getSelectedFace();
@@ -280,8 +318,33 @@ void keyboard(unsigned char key, int x, int y) {
 // ── Teclas especiais ─────────────────────────────────────────────────────────
 void specialKeys(int key, int x, int y) {
     if (showSplash) { showSplash = false; glutPostRedisplay(); return; }
-    // Arrow keys removidos (sem controle de cor de fundo)
-    (void)key; (void)x; (void)y;
+
+    int face = cube.getSelectedFace();
+
+    switch (key) {
+        case GLUT_KEY_UP:
+        case GLUT_KEY_DOWN: {
+            if (!cube.faceHasTexture(face)) break;
+            float s = cube.getFaceTextureScale(face);
+            s += (key == GLUT_KEY_UP) ? 0.1f : -0.1f;
+            cube.setFaceTextureScale(face, s);
+            std::cout << "Zoom face " << face << ": " << cube.getFaceTextureScale(face) << std::endl;
+            break;
+        }
+        case GLUT_KEY_LEFT:
+            if (!cube.faceHasTexture(face)) break;
+            cube.rotateFaceTexture(face, -1);   // anti-horário
+            std::cout << "Rotacao face " << face << ": "
+                      << cube.getFaceTextureRotation(face) * 90 << " graus" << std::endl;
+            break;
+        case GLUT_KEY_RIGHT:
+            if (!cube.faceHasTexture(face)) break;
+            cube.rotateFaceTexture(face, +1);   // horário
+            std::cout << "Rotacao face " << face << ": "
+                      << cube.getFaceTextureRotation(face) * 90 << " graus" << std::endl;
+            break;
+    }
+    glutPostRedisplay();
 }
 
 // ── Mouse ─────────────────────────────────────────────────────────────────────
