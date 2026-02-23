@@ -8,6 +8,10 @@
 #include "background.h"
 #include "lua_bridge.h"
 
+#ifdef BENCH_MODE
+#include "bench.h"
+#endif
+
 Cubo       cube;
 Background background;
 LuaBridge  bridge;
@@ -16,6 +20,26 @@ int  windowWidth  = 800;
 int  windowHeight = 600;
 bool showControls = false;
 bool showSplash   = true;   // tela inicial
+
+static int mainWin  = 0;   // ID da janela principal (sempre usado)
+#ifdef BENCH_MODE
+static int benchWin = 0;
+
+/* Estima memória de textura: assume RGBA 8bpp, escala típica 512×512 por face */
+static long estimateTexKb(const Cubo& c) {
+    long kb = 0;
+    for (int i = 0; i < 6; ++i)
+        if (c.faceHasTexture(i))
+            kb += (512 * 512 * 4) / 1024;   // ~1024 kB por textura 512×512 RGBA
+    return kb;
+}
+static int countTex(const Cubo& c) {
+    int n = 0;
+    for (int i = 0; i < 6; ++i)
+        if (c.faceHasTexture(i)) ++n;
+    return n;
+}
+#endif
 
 // ── Diálogo de arquivo ───────────────────────────────────────────────────────
 #ifdef _WIN32
@@ -109,7 +133,7 @@ void drawSplash() {
     float tx = px1 + 20.0f;
     float ty = py2 - 30.0f;
     glColor4f(0.9f, 0.9f, 1.0f, 0.95f);
-    drawText(tx, ty, "CUBE EDITOR  -  C++ & Lua");
+    drawText(tx, ty, "CUBO 3D");
     ty -= 26.0f;
     glColor4f(0.6f, 0.6f, 0.75f, 0.9f);
     drawText(tx, ty, "-------------------------------");
@@ -130,7 +154,7 @@ void drawSplash() {
     drawText(tx, ty, "Seta Esq/Dir     Girar imagem");
     ty -= 26.0f;
     glColor4f(0.5f, 0.8f, 0.5f, 0.85f);
-    drawText(px1 + pw * 0.5f - 80.0f, ty, "Pressione qualquer tecla para comecar");
+    drawText(px1 + pw * 0.5f - 80.0f, ty, "Pressione para comecar");
 
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
@@ -172,9 +196,34 @@ void drawSplash() {
     glMatrixMode(GL_MODELVIEW);
 }
 
+// ── Display da janela de benchmark ───────────────────────────────────────────
+#ifdef BENCH_MODE
+void displayBench() {
+    int bw = glutGet(GLUT_WINDOW_WIDTH);
+    int bh = glutGet(GLUT_WINDOW_HEIGHT);
+
+    glClearColor(0.04f, 0.04f, 0.08f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    gBench.draw(bw, bh);
+
+    glutSwapBuffers();
+}
+#endif
+
 // ── Display ──────────────────────────────────────────────────────────────────
 void display() {
+#ifdef BENCH_MODE
+    gBench.frameBegin();
+#endif
+
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    /* ── Render C++ (background + cubo) ── */
+#ifdef BENCH_MODE
+    gBench.cppRenderBegin();
+#endif
+
     background.render();
 
     glMatrixMode(GL_MODELVIEW);
@@ -182,7 +231,11 @@ void display() {
     glTranslatef(0.0f, 0.0f, -5.0f);
     cube.render();
 
-    // Botão "Controles" (canto superior direito)
+#ifdef BENCH_MODE
+    gBench.cppRenderEnd();
+#endif
+
+    /* ── Botão "Controles" (canto superior direito) ── */
     {
         glMatrixMode(GL_PROJECTION);
         glPushMatrix(); glLoadIdentity();
@@ -244,6 +297,13 @@ void display() {
     if (showSplash) drawSplash();
 
     glutSwapBuffers();
+
+    /* ── Fecha o frame de bench e pede redraw na janela de monitor ── */
+#ifdef BENCH_MODE
+    gBench.setTexInfo(countTex(cube), estimateTexKb(cube));
+    gBench.frameEnd();
+    if (benchWin) glutPostWindowRedisplay(benchWin);
+#endif
 }
 
 // ── Timer para animação contínua ─────────────────────────────────────────────
@@ -261,31 +321,55 @@ void keyboard(unsigned char key, int x, int y) {
         case 's': case 'S':
         case 'a': case 'A':
         case 'd': case 'D':
+#ifdef BENCH_MODE
+            gBench.luaBegin();
+#endif
             bridge.handleInput(cube, key);
+#ifdef BENCH_MODE
+            gBench.luaEnd();
+#endif
             break;
 
         case '1': {   // Vermelho
             Color c = cube.getFaceColor(cube.getSelectedFace());
             float nr, ng, nb;
+#ifdef BENCH_MODE
+            gBench.luaBegin();
+#endif
             bridge.mixColor(c.r, c.g, c.b, 1.0f, 0.0f, 0.0f, nr, ng, nb);
+#ifdef BENCH_MODE
+            gBench.luaEnd();
+#endif
             cube.setFaceColor(cube.getSelectedFace(), nr, ng, nb);
             break;
         }
         case '2': {   // Azul
             Color c = cube.getFaceColor(cube.getSelectedFace());
             float nr, ng, nb;
+#ifdef BENCH_MODE
+            gBench.luaBegin();
+#endif
             bridge.mixColor(c.r, c.g, c.b, 0.0f, 0.0f, 1.0f, nr, ng, nb);
+#ifdef BENCH_MODE
+            gBench.luaEnd();
+#endif
             cube.setFaceColor(cube.getSelectedFace(), nr, ng, nb);
             break;
         }
         case '3': {   // Verde
             Color c = cube.getFaceColor(cube.getSelectedFace());
             float nr, ng, nb;
+#ifdef BENCH_MODE
+            gBench.luaBegin();
+#endif
             bridge.mixColor(c.r, c.g, c.b, 0.0f, 1.0f, 0.0f, nr, ng, nb);
+#ifdef BENCH_MODE
+            gBench.luaEnd();
+#endif
             cube.setFaceColor(cube.getSelectedFace(), nr, ng, nb);
             break;
         }
-        case '4':   // Preto — aplica direto (mistura não faz sentido para preto)
+        case '4':   // Preto
             cube.setFaceColor(cube.getSelectedFace(), 0.0f, 0.0f, 0.0f);
             break;
 
@@ -333,13 +417,13 @@ void specialKeys(int key, int x, int y) {
         }
         case GLUT_KEY_LEFT:
             if (!cube.faceHasTexture(face)) break;
-            cube.rotateFaceTexture(face, -1);   // anti-horário
+            cube.rotateFaceTexture(face, -1);
             std::cout << "Rotacao face " << face << ": "
                       << cube.getFaceTextureRotation(face) * 90 << " graus" << std::endl;
             break;
         case GLUT_KEY_RIGHT:
             if (!cube.faceHasTexture(face)) break;
-            cube.rotateFaceTexture(face, +1);   // horário
+            cube.rotateFaceTexture(face, +1);
             std::cout << "Rotacao face " << face << ": "
                       << cube.getFaceTextureRotation(face) * 90 << " graus" << std::endl;
             break;
@@ -383,19 +467,28 @@ void init() {
         exit(1);
     }
 
-    // Liga o bridge ao background e gera as 420 estrelas via Lua
     background.setBridge(&bridge);
+
+#ifdef BENCH_MODE
+    gBench.luaBegin();
+#endif
     bridge.initStars(420);
+#ifdef BENCH_MODE
+    gBench.luaEnd();
+#endif
 
     cube.setRotation(15.0f, 25.0f, 0.0f);
     cube.initPatterns();
     background.setDefault();
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
-    std::cout << "\n=== CUBE EDITOR ===\n"
+    std::cout << "\n=== CUBO 3D ===\n"
               << "1 Vermelho  2 Azul  3 Verde\n"
               << "R: limpar face   Backspace: foto\n"
               << "H: ajuda   ESC: sair\n"
+#ifdef BENCH_MODE
+              << "[BENCH MODE ATIVO — janela de monitoramento aberta]\n"
+#endif
               << "Vermelho+Azul=Roxo | Vermelho+Verde=Amarelo | Azul+Verde=Ciano\n"
               << "Roxo/Amarelo/Ciano + complementar = Branco\n";
 }
@@ -410,12 +503,15 @@ void reshape(int w, int h) {
     glMatrixMode(GL_MODELVIEW);
 }
 
+// ── Main ─────────────────────────────────────────────────────────────────────
 int main(int argc, char** argv) {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
+
+    /* ── Janela principal ── */
     glutInitWindowSize(800, 600);
     glutInitWindowPosition(100, 100);
-    glutCreateWindow("Cube Editor - C++ & Lua");
+    mainWin = glutCreateWindow("Cubo 3d");
 
     init();
 
@@ -424,7 +520,18 @@ int main(int argc, char** argv) {
     glutKeyboardFunc(keyboard);
     glutSpecialFunc(specialKeys);
     glutMouseFunc(mouse);
-    glutTimerFunc(16, timer, 0);   // inicia animação contínua
+    glutTimerFunc(16, timer, 0);
+
+#ifdef BENCH_MODE
+    /* ── Janela de benchmark ── */
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
+    glutInitWindowSize(400, 260);
+    glutInitWindowPosition(920, 100);   /* 100 + 800 + 20 px de gap */
+    benchWin = glutCreateWindow("Benchmark");
+    glutDisplayFunc(displayBench);
+    /* Volta ao contexto da janela principal antes do loop */
+    glutSetWindow(mainWin);
+#endif
 
     glutMainLoop();
     return 0;
