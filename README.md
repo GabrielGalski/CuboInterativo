@@ -2,6 +2,10 @@
 
 Aplicação de um cubo 3D interativo desenvolvido em C++ com OpenGL/GLUT e lógica de scripting em Lua. 
 
+![image alt] (https://github.com/GabrielGalski/old/blob/50e32170c62ea7a774610048be123d490d482786/Screenshot%20from%202026-02-23%2017-43-34.png) 
+
+![image alt] (https://github.com/GabrielGalski/old/blob/50e32170c62ea7a774610048be123d490d482786/Screenshot%20from%202026-02-23%2017-44-21.png) 
+
 C++: cuida da renderização gráfica e da estrutura da aplicação. 
 Lua: controla a movimentação do cubo, animação das estrelas, processamento de entrada, mistura de cores e os padrões das faces do cubo.
 
