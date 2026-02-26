@@ -1,10 +1,8 @@
 /*
  * bench.cpp
  *
- * Implementação do BenchMonitor. Toda medição usa std::chrono::high_resolution_clock.
- * A memória RSS é lida de /proc/self/status (Linux); em outros sistemas retorna 0.
- * O painel é renderizado em OpenGL imediato (glBegin/glEnd + glutBitmapCharacter),
- * sem dependências externas além das já usadas pelo projeto.
+ * Implementação do BenchMonitor. Medições com std::chrono::high_resolution_clock,
+ * RSS lida de /proc/self/status no Linux, painel renderizado em OpenGL imediato.
  */
 
 #ifdef BENCH_MODE
@@ -18,10 +16,7 @@
 #include <string>
 #include <numeric>
 
-/* Instância global */
 BenchMonitor gBench;
-
-/* ── Helpers internos ─────────────────────────────────────────────────────── */
 
 static double toMs(BenchTP a, BenchTP b) {
     return std::chrono::duration<double, std::milli>(b - a).count();
@@ -29,8 +24,6 @@ static double toMs(BenchTP a, BenchTP b) {
 static double toUs(BenchTP a, BenchTP b) {
     return std::chrono::duration<double, std::micro>(b - a).count();
 }
-
-/* ── Ciclo de frame ───────────────────────────────────────────────────────── */
 
 void BenchMonitor::frameBegin() {
     frameStart   = BenchClock::now();
@@ -51,7 +44,6 @@ void BenchMonitor::frameEnd() {
 
     pushSnap(fms, lus, cus);
 
-    /* FPS baseado em janela deslizante de 0.5 s */
     frameCount++;
     fpsAccumMs += fms;
     if (fpsAccumMs >= 500.0) {
@@ -61,22 +53,16 @@ void BenchMonitor::frameEnd() {
     }
 }
 
-/* ── Seções Lua / C++ ─────────────────────────────────────────────────────── */
-
 void BenchMonitor::luaBegin()         { luaStart = BenchClock::now(); }
 void BenchMonitor::luaEnd()           { luaAccumUs += toUs(luaStart, BenchClock::now()); }
 
 void BenchMonitor::cppRenderBegin()   { cppStart = BenchClock::now(); }
 void BenchMonitor::cppRenderEnd()     { cppAccumUs += toUs(cppStart, BenchClock::now()); }
 
-/* ── Texturas ─────────────────────────────────────────────────────────────── */
-
 void BenchMonitor::setTexInfo(int activeCount, long estimatedKb) {
     texCount = activeCount;
     texKb    = estimatedKb;
 }
-
-/* ── Média deslizante ─────────────────────────────────────────────────────── */
 
 void BenchMonitor::pushSnap(float fms, float lus, float cus) {
     history.push_back({fms, lus, cus});
@@ -90,8 +76,6 @@ void BenchMonitor::pushSnap(float fms, float lus, float cus) {
     avgLuaUs   = (float)(sl / n);
     avgCppUs   = (float)(sc / n);
 }
-
-/* ── Memória RSS ──────────────────────────────────────────────────────────── */
 
 long BenchMonitor::getRssKb() {
 #ifdef __linux__
@@ -108,18 +92,14 @@ long BenchMonitor::getRssKb() {
     return 0;
 }
 
-/* ── Painel OpenGL ────────────────────────────────────────────────────────── */
-
 namespace {
 
-/* Desenha texto bitmap em coordenadas de janela */
 void btext(float x, float y, const char* s) {
     glRasterPos2f(x, y);
     for (; *s; ++s)
         glutBitmapCharacter(GLUT_BITMAP_8_BY_13, (unsigned char)*s);
 }
 
-/* Quad sólido */
 void quad(float x1, float y1, float x2, float y2) {
     glBegin(GL_QUADS);
     glVertex2f(x1,y1); glVertex2f(x2,y1);
@@ -127,7 +107,6 @@ void quad(float x1, float y1, float x2, float y2) {
     glEnd();
 }
 
-/* Borda */
 void rect(float x1, float y1, float x2, float y2) {
     glBegin(GL_LINE_LOOP);
     glVertex2f(x1,y1); glVertex2f(x2,y1);
@@ -135,24 +114,19 @@ void rect(float x1, float y1, float x2, float y2) {
     glEnd();
 }
 
-/* Barra de progresso horizontal */
 void bar(float x, float y, float w, float h, float frac,
          float r, float g, float b) {
-    /* fundo escuro */
     glColor4f(0.15f,0.15f,0.20f,0.85f);
     quad(x, y, x+w, y+h);
-    /* preenchimento */
     glColor4f(r, g, b, 0.90f);
     quad(x, y, x + w*frac, y+h);
-    /* borda */
     glColor4f(0.4f,0.4f,0.55f,0.7f);
     rect(x, y, x+w, y+h);
 }
 
-} /* anonymous */
+}
 
 void BenchMonitor::draw(int winW, int winH) const {
-    /* ── Configuração 2D ── */
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -163,7 +137,6 @@ void BenchMonitor::draw(int winW, int winH) const {
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix(); glLoadIdentity();
 
-    /* ── Dimensões do painel ── */
     const float PW   = 360.0f;
     const float PH   = 230.0f;
     const float PAD  = 12.0f;
@@ -172,16 +145,13 @@ void BenchMonitor::draw(int winW, int winH) const {
     const float x2   = x1 + PW;
     const float y1   = y2 - PH;
 
-    /* Fundo semi-opaco */
     glColor4f(0.04f, 0.04f, 0.08f, 0.88f);
     quad(x1, y1, x2, y2);
 
-    /* Borda */
     glColor4f(0.35f, 0.45f, 0.90f, 0.70f);
     glLineWidth(1.2f);
     rect(x1, y1, x2, y2);
 
-    /* ── Cabeçalho ── */
     glColor4f(0.55f, 0.70f, 1.00f, 0.95f);
     btext(x1 + 8.0f, y2 - 16.0f, "BENCH MONITOR");
     glColor4f(0.30f, 0.35f, 0.55f, 0.80f);
@@ -189,16 +159,14 @@ void BenchMonitor::draw(int winW, int winH) const {
     glVertex2f(x1+6.0f, y2-22.0f); glVertex2f(x2-6.0f, y2-22.0f);
     glEnd();
 
-    /* ── Dados ── */
     char buf[128];
     float ty = y2 - 36.0f;
     const float LX  = x1 + 10.0f;
-    const float BX  = x1 + 170.0f;   /* início das barras */
-    const float BW  = PW - 180.0f;   /* largura das barras */
+    const float BX  = x1 + 170.0f;
+    const float BW  = PW - 180.0f;
     const float BH  = 10.0f;
-    const float LS  = 26.0f;         /* passo de linha */
+    const float LS  = 26.0f;
 
-    /* FPS */
     glColor4f(0.85f, 0.95f, 0.70f, 0.95f);
     snprintf(buf, sizeof(buf), "FPS          %.1f", fps);
     btext(LX, ty, buf);
@@ -208,7 +176,6 @@ void BenchMonitor::draw(int winW, int winH) const {
     bar(BX, ty - 2.0f, BW, BH, fpsFrac, fpsR, fpsG, 0.25f);
     ty -= LS;
 
-    /* Tempo de frame */
     glColor4f(0.85f, 0.85f, 0.90f, 0.95f);
     snprintf(buf, sizeof(buf), "Frame time   %.2f ms", avgFrameMs);
     btext(LX, ty, buf);
@@ -216,7 +183,6 @@ void BenchMonitor::draw(int winW, int winH) const {
     bar(BX, ty - 2.0f, BW, BH, ftFrac, 0.75f, 0.55f, 0.90f);
     ty -= LS;
 
-    /* C++ render */
     glColor4f(0.55f, 0.85f, 1.00f, 0.95f);
     snprintf(buf, sizeof(buf), "C++ render   %.0f µs", avgCppUs);
     btext(LX, ty, buf);
@@ -224,14 +190,12 @@ void BenchMonitor::draw(int winW, int winH) const {
     bar(BX, ty - 2.0f, BW, BH, avgCppUs/maxUs, 0.30f, 0.70f, 1.00f);
     ty -= LS;
 
-    /* Lua */
     glColor4f(1.00f, 0.80f, 0.40f, 0.95f);
     snprintf(buf, sizeof(buf), "Lua runtime  %.0f µs", avgLuaUs);
     btext(LX, ty, buf);
     bar(BX, ty - 2.0f, BW, BH, avgLuaUs/maxUs, 1.00f, 0.70f, 0.20f);
     ty -= LS;
 
-    /* Memória RSS */
     long rss = getRssKb();
     glColor4f(0.85f, 0.85f, 0.85f, 0.90f);
     if (rss > 0)
@@ -243,7 +207,6 @@ void BenchMonitor::draw(int winW, int winH) const {
     bar(BX, ty - 2.0f, BW, BH, memFrac, 0.70f, 0.60f, 0.85f);
     ty -= LS;
 
-    /* Cache de texturas */
     glColor4f(0.70f, 0.95f, 0.80f, 0.95f);
     if (texKb > 0)
         snprintf(buf, sizeof(buf), "Tex cache    %d tex / ~%ld kB", texCount, texKb);
@@ -254,7 +217,6 @@ void BenchMonitor::draw(int winW, int winH) const {
     bar(BX, ty - 2.0f, BW, BH, texFrac, 0.35f, 0.85f, 0.55f);
     ty -= LS;
 
-    /* Legenda C++ vs Lua */
     glColor4f(0.30f, 0.35f, 0.55f, 0.80f);
     glBegin(GL_LINES);
     glVertex2f(x1+6.0f, ty+10.0f); glVertex2f(x2-6.0f, ty+10.0f);
@@ -268,7 +230,6 @@ void BenchMonitor::draw(int winW, int winH) const {
     glColor4f(0.80f, 0.80f, 0.85f, 0.90f);
     btext(LX + 69.0f, ty, "Lua");
 
-    /* ── Restaura estado ── */
     glPopMatrix();
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();

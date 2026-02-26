@@ -1,3 +1,10 @@
+--[[
+  faces.lua
+Mantém o estado das seis faces do cubo no lado Lua: por enquanto só o caminho
+da foto carregada em cada face. resolverFacePicking converte o byte R lido pelo
+glReadPixels no índice da face clicada.
+]]
+
 local faces = {}
 
 for i = 0, 5 do
@@ -13,10 +20,9 @@ local function limitarIndice(indice)
 end
 
 --[[
-  Resolve a face clicada a partir do valor do canal R lido pelo glReadPixels.
-  O cubo renderiza cada face com glColor3ub(indice+1, 0, 0), então o R lido
-  vale 1–6 para as faces 0–5, e 0 para o fundo.
-  Retorna o índice da face (0–5) ou -1 se nenhuma face foi atingida.
+o cubo renderiza cada face com glColor3ub durante o picking,
+então o canal R lido vale 1–6 para as faces 0–5 e 0 para o fundo.
+Retorna o índice da face ou -1 se o clique não acertou nenhuma.
 ]]
 function resolverFacePicking(valorPixelR)
     if valorPixelR >= 1 and valorPixelR <= 6 then
@@ -33,4 +39,3 @@ function definirFotoFace(indiceFace, caminho)
     end
     face.caminhoFoto = caminho
 end
-

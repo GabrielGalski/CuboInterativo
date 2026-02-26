@@ -1,22 +1,15 @@
 --[[
-  background.lua
-
-  Geração e animação das estrelas em Lua.
-  initStars(count) cria a tabela com posições e propriedades aleatórias,
-  usando um LCG determinístico (mesma seed = mesmo céu toda vez).
-  getStarPositions(t) calcula, para o tempo t (segundos), a posição
-  e cor de cada estrela com a mesma lógica que estava em C++:
-    - Deriva vertical com loop
-    - Oscilação horizontal suave (seno)
-    - Rotação global ao redor do centro (0.5, 0.5)
-    - Cintilamento via seno com fase individual
-  Retorna uma tabela flat: { x1,y1,r1,g1,b1, x2,y2,r2,g2,b2, ... }
+background.lua:
+geração e animação do campo de estrelas. inicializarEstrelas(n) cria a tabela
+com posições e propriedades usando um LCG com seed fixa.
+obterPosicoesEstrelas recalcula posição e cor para o instante t e
+devolve uma tabela flat com cinco valores por estrela que o C++
+lê diretamente para glVertex2f e glColor3f.
 ]]
 
 local estrelas = {}
 local TWO_PI = 2.0 * math.pi
 
--- LCG idêntico ao usado em C++: mesmos parâmetros de Knuth
 local estadoLCG = 1337
 
 local function geradorLCG()
@@ -28,12 +21,8 @@ local function aleatorio01()
     return (geradorLCG() & 0x00FFFFFF) / 16777215.0
 end
 
---[[
-  Gera 'quantidade' estrelas com posição, velocidade, brilho e fase aleatórios.
-  Deve ser chamada uma vez pelo C++ logo após carregar o script.
-]]
 function inicializarEstrelas(quantidade)
-    estadoLCG = 1337   -- garante reprodutibilidade
+    estadoLCG = 1337
     estrelas = {}
     for i = 1, quantidade do
         local profundidade = aleatorio01()
@@ -48,12 +37,12 @@ function inicializarEstrelas(quantidade)
 end
 
 --[[
-  Calcula a posição e cor de todas as estrelas para o instante t (segundos).
-  Retorna tabela flat com 5 valores por estrela: x, y, r, g, b.
-  O C++ lê essa tabela e chama glVertex2f / glColor3f diretamente.
+calcula posição e cor de todas as estrelas para o instante t. Cada estrela
+deriva para baixo em loop, oscila horizontalmente com seno e rotaciona ao
+redor do centro da tela a cada 120 segundos. O brilho cintila com seno
+individual por estrela.
 ]]
 function obterPosicoesEstrelas(tempo)
-    -- Ângulo de rotação global: uma volta completa a cada 120 s
     local angulo = tempo * (TWO_PI / 120.0)
     local cossenoAngulo  = math.cos(angulo)
     local senoAngulo  = math.sin(angulo)
@@ -62,29 +51,23 @@ function obterPosicoesEstrelas(tempo)
     local indice = 0
 
     for _, estrela in ipairs(estrelas) do
-        -- 1. Deriva vertical com loop
         local yDerivado = estrela.y - (tempo * estrela.velocidade) % 1.0
         if yDerivado < 0.0 then yDerivado = yDerivado + 1.0 end
 
-        -- 2. Oscilação horizontal suave
         local desvio = math.sin(tempo * 0.15 + estrela.cintilar) * 0.01
         local xDerivado = estrela.x + desvio
 
-        -- 3. Rotação ao redor de (0.5, 0.5)
         local relativoX = xDerivado - 0.5
         local relativoY = yDerivado - 0.5
         local rotacionadoX = relativoX * cossenoAngulo - relativoY * senoAngulo + 0.5
         local rotacionadoY = relativoX * senoAngulo + relativoY * cossenoAngulo + 0.5
 
-        -- Wrap para manter dentro de [0, 1]
         rotacionadoX = rotacionadoX - math.floor(rotacionadoX)
         rotacionadoY = rotacionadoY - math.floor(rotacionadoY)
 
-        -- 4. Cintilamento
         local cintilacao = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(tempo * 2.0 + estrela.cintilar))
         local brilhoFinal  = estrela.brilho * cintilacao
 
-        -- Empacota: x, y, r, g, b (leve dominante azul, igual ao C++)
         resultado[indice + 1] = rotacionadoX
         resultado[indice + 2] = rotacionadoY
         resultado[indice + 3] = brilhoFinal * 0.85
@@ -96,7 +79,6 @@ function obterPosicoesEstrelas(tempo)
     return resultado
 end
 
--- Estado legado (mantido para compatibilidade com updateBackground no bridge)
 local bgState = { colorIndex = 0, model = 1 }
 function getBackgroundState() return bgState.colorIndex, bgState.model end
 function setBackgroundState(i, m) bgState.colorIndex = i; bgState.model = m end

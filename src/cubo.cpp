@@ -1,13 +1,14 @@
 /*
  * cubo.cpp
  *
- * implementa o cubo 3d: seis faces com vértices em (-1,-1,-1) a (1,1,1),
- * cada uma com cor própria. render() aplica as rotações acumuladas (rotX, rotY,
- * rotZ) e desenha os quads. selectCurrentFace realiza color picking: desenha o
- * cubo com uma cor de identificação por face (R=1..6), lê o pixel na posição
- * do clique (convertendo y de janela para OpenGL), e define faceSelecionada pelo
- * valor lido. a mistura de cores na face atual pode ser feita por addColorToCurrentFace
- * (lógica local) ou externamente via getFaceColor/setFaceColor e o mixer em Lua.
+ * Implementa o cubo com seis faces e vértices de -1 a 1, cada uma com cor
+ * e textura independentes. renderizar() aplica as rotações acumuladas e desenha
+ * os quads. Quando há textura, primeiro a cor sólida de fundo,
+ * depois a imagem com rotação e escala configuradas pelo usuário.
+ *
+ * O color picking funciona renderizando o cubo fora da tela com uma cor única
+ * por face e lendo o pixel clicado. o c++ só lê o byte e quem converte
+ * R para índice de face é o Lua.
  */
 
 #include "cubo.h"
@@ -214,8 +215,7 @@ void cropCenterSquare(int& width, int& height, std::vector<unsigned char>& dataR
 }
 
 /*
- * Construtor: rotações e face selecionada em zero; todas as seis faces
- * começam com cor branca (1, 1, 1).
+ * Inicia todas as faces com cor branca e sem textura.
  */
 Cubo::Cubo() : rotacaoX(0), rotacaoY(0), rotacaoZ(0), faceSelecionada(0) {
     for (int i = 0; i < 6; ++i) {
@@ -228,10 +228,11 @@ Cubo::Cubo() : rotacaoX(0), rotacaoY(0), rotacaoZ(0), faceSelecionada(0) {
 }
 
 /*
- * Salva a matriz de modelo, aplica rotações em graus nos eixos X, Y e Z
- * (na ordem fixa glRotatef X, Y, Z), desenha seis GL_QUADS com as cores
- * de coresFaces e restaura a matriz. A ordem dos vértices segue a orientação
- * frontal de cada face para que a normal apontar para fora.
+ * Desenha os seis quads do cubo. Aplica as rotações acumuladas e
+ * percorre as faces: sem textura vai cor sólida direto; com textura faz
+ * dois passes, desenhando a cor de fundo antes de sobrepor a imagem com
+ * polygon offset para evitar z-fighting. Escala e rotação de textura são
+ * aplicadas via remapeamento de UVs.
  */
 void Cubo::renderizar() {
     glPushMatrix();
@@ -249,25 +250,21 @@ void Cubo::renderizar() {
 
         if (hasTexture) {
             float scale = escalasTexturasFaces[face];
-            int   rot   = rotacoesTexturasFaces[face]; // 0-3: passos de 90° CW
+            int   rot   = rotacoesTexturasFaces[face];
 
-            // Tabela de UVs por rotação para os 4 vértices (v0=BL,v1=BR,v2=TR,v3=TL).
-            // Cada linha é {u0,v0, u1,v1, u2,v2, u3,v3}.
             // rot 0=normal, 1=90°CW, 2=180°, 3=270°CW
             static const float uvTable[4][8] = {
-                {0,0, 1,0, 1,1, 0,1},  // 0°
-                {1,0, 1,1, 0,1, 0,0},  // 90° CW
-                {1,1, 0,1, 0,0, 1,0},  // 180°
-                {0,1, 0,0, 1,0, 1,1},  // 270° CW
+                {0,0, 1,0, 1,1, 0,1},
+                {1,0, 1,1, 0,1, 0,0},
+                {1,1, 0,1, 0,0, 1,0},
+                {0,1, 0,0, 1,0, 1,1},
             };
             const float* uv = uvTable[rot & 3];
 
-            // Ajusta UVs para zoom-in: [0,1] → [uvMin, uvMax]
             auto mapUV = [&](float u, float v, float lo, float hi) -> std::pair<float,float> {
                 return { lo + u * (hi - lo), lo + v * (hi - lo) };
             };
 
-            // ── Passo 1: cor sólida de fundo ─────────────────────────────────
             glDisable(GL_TEXTURE_2D);
             glColor3f(c.vermelho, c.verde, c.azul);
             glBegin(GL_QUADS);
@@ -277,7 +274,6 @@ void Cubo::renderizar() {
             glVertex3f(v3.x, v3.y, v3.z);
             glEnd();
 
-            // ── Passo 2: textura com rotação + escala ────────────────────────
             glEnable(GL_POLYGON_OFFSET_FILL);
             glPolygonOffset(-1.0f, -1.0f);
             glDepthFunc(GL_LEQUAL);
@@ -288,7 +284,6 @@ void Cubo::renderizar() {
             glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 
             if (scale >= 1.0f) {
-                // Zoom in: UV range encolhe ao redor do centro
                 float lo = 0.5f - 0.5f / scale;
                 float hi = 0.5f + 0.5f / scale;
                 auto [u0,v0uv] = mapUV(uv[0], uv[1], lo, hi);
@@ -302,7 +297,6 @@ void Cubo::renderizar() {
                 glTexCoord2f(u3,v3uv); glVertex3f(v3.x, v3.y, v3.z);
                 glEnd();
             } else {
-                // Zoom out: vértices encolhem, UV normal (com rotação)
                 float cx2 = (v0.x+v1.x+v2.x+v3.x)*0.25f;
                 float cy2 = (v0.y+v1.y+v2.y+v3.y)*0.25f;
                 float cz2 = (v0.z+v1.z+v2.z+v3.z)*0.25f;
@@ -336,29 +330,18 @@ void Cubo::renderizar() {
     glPopMatrix();
 }
 
-/*
- * Soma os incrementos dx, dy, dz às rotações internas (em graus). Usado
- * após processInput em Lua retornar os deltas para a tecla pressionada.
- */
 void Cubo::rotacionar(float dx, float dy, float dz) {
     rotacaoX += dx;
     rotacaoY += dy;
     rotacaoZ += dz;
 }
 
-/*
- * Substitui as rotações atuais pelos valores absolutos x, y, z (graus).
- * Usado na inicialização para definir a pose inicial do cubo.
- */
 void Cubo::definirRotacao(float x, float y, float z) {
     rotacaoX = x;
     rotacaoY = y;
     rotacaoZ = z;
 }
 
-/*
- * limpa completamente a face selecionada: cor para branco e remove textura
- */
 void Cubo::limparFaceSelecionada() {
     coresFaces[faceSelecionada] = {1.0f, 1.0f, 1.0f};
     texturasFaces[faceSelecionada] = 0;
@@ -367,17 +350,10 @@ void Cubo::limparFaceSelecionada() {
     rotacoesTexturasFaces[faceSelecionada] = 0;
 }
 
-/*
- * define a cor da face atualmente selecionada para branco
- */
 void Cubo::limparCorFaceSelecionada() {
     coresFaces[faceSelecionada] = {1.0f, 1.0f, 1.0f};
 }
 
-/*
- * Atualiza a cor da face indicada pelo índice (0–5) para (r, g, b). Índices
- * fora do intervalo são ignorados.
- */
 void Cubo::definirCorFace(int face, float r, float g, float b) {
     if (face >= 0 && face < 6) {
         coresFaces[face].vermelho = r;
@@ -387,10 +363,9 @@ void Cubo::definirCorFace(int face, float r, float g, float b) {
 }
 
 /*
- * Renderiza a cena de color picking (cada face com glColor3ub(i+1, 0, 0)),
- * lê o pixel em (x, y) com glReadPixels e retorna o byte R (0–255).
- * Valores 1–6 correspondem às faces 0–5; 0 indica fundo.
- * A resolução R → índice de face é feita pelo Lua (bridge.resolverFacePicking).
+ * Renderiza a cena de picking fora do framebuffer visível, com cada face em
+ * glColor3ub(i+1, 0, 0). Lê o pixel clicado e retorna o canal R bruto.
+ * O valor é passado para bridge.resolverFacePicking para obter o índice de face.
  */
 int Cubo::lerPixelPicking(int x, int y) {
     GLint viewport[4];
@@ -469,15 +444,20 @@ int Cubo::lerPixelPicking(int x, int y) {
 }
 
 /*
- * Define a face selecionada diretamente.
- * Chamada pelo main.cpp após resolução do índice via bridge.resolverFacePicking().
- * Valores fora de [0, 5] são ignorados (mantém seleção atual).
+ * Define a face selecionada diretamente. Chamada após a resolução do índice
+ * pelo Lua. Valores fora de [0, 5] são ignorados.
  */
 void Cubo::definirFaceSelecionada(int face) {
     if (face >= 0 && face < 6)
         faceSelecionada = face;
 }
 
+/*
+ * Carrega uma imagem do disco e cria uma textura OpenGL para a face indicada.
+ * Tenta stb_image primeiro (se disponível) e cai para o leitor PPP interno.
+ * Imagens não quadradas são recortadas ao centro antes de serem enviadas para
+ * a GPU. Detecta canal alpha em PNGs e usa GL_RGBA quando necessário.
+ */
 bool Cubo::definirFotoFaceDeArquivo(int face, const std::string& path) {
     if (face < 0 || face >= 6) {
         return false;
@@ -491,12 +471,10 @@ bool Cubo::definirFotoFaceDeArquivo(int face, const std::string& path) {
 #if HAS_STB_IMAGE
     {
         int channels = 0;
-        // Sempre carrega RGBA para preservar canal alpha de PNGs transparentes
         unsigned char* raw = stbi_load(path.c_str(), &width, &height, &channels, 0);
         if (raw) {
             size_t pixels = static_cast<size_t>(width) * static_cast<size_t>(height);
             if (channels == 4) {
-                // Verifica se há pixels semi-transparentes
                 hasAlpha = false;
                 for (size_t i = 0; i < pixels; ++i) {
                     if (raw[i * 4 + 3] < 255) {
@@ -509,7 +487,6 @@ bool Cubo::definirFotoFaceDeArquivo(int face, const std::string& path) {
                 data.assign(raw, raw + pixels * 3);
                 hasAlpha = false;
             } else {
-                // Grayscale ou outros: converte para RGB
                 data.resize(pixels * 3);
                 for (size_t i = 0; i < pixels; ++i) {
                     unsigned char v = raw[i * static_cast<size_t>(channels)];
@@ -576,19 +553,15 @@ bool Cubo::definirFotoFaceDeArquivo(int face, const std::string& path) {
     } else {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB,  width, height, 0, GL_RGB,  GL_UNSIGNED_BYTE, data.data());
     }
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4); // restaura padrão
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
     texturasFaces[face]        = texId;
     texturasFacesTemAlfa[face] = hasAlpha;
-    escalasTexturasFaces[face]    = 1.0f;   // reseta zoom ao carregar nova imagem
-    rotacoesTexturasFaces[face] = 0;      // reseta rotação ao carregar nova imagem
+    escalasTexturasFaces[face]    = 1.0f;
+    rotacoesTexturasFaces[face] = 0;
     return true;
 }
 
-/*
- * Define o fator de escala da textura de uma face.
- * Clampado a [0.1, 4.0].
- */
 void Cubo::definirEscalaTexturaFace(int face, float s) {
     if (face < 0 || face >= 6) return;
     if (s < 0.1f) s = 0.1f;
@@ -597,9 +570,8 @@ void Cubo::definirEscalaTexturaFace(int face, float s) {
 }
 
 /*
- * Rotaciona a textura da face em passos de 90°.
- * delta = +1 → 90° no sentido horário; delta = -1 → sentido anti-horário.
- * O valor é mantido no intervalo [0, 3] com módulo circular.
+ * Rotaciona a textura da face em passos de 90°. delta=+1 é horário,
+ * delta=-1 é anti-horário. O índice é mantido em [0, 3] com módulo circular.
  */
 void Cubo::rotacionarTexturaFace(int face, int delta) {
     if (face < 0 || face >= 6) return;

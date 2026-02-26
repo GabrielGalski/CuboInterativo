@@ -1,12 +1,23 @@
 /*
  * lua_bridge.cpp
  *
- * cria e mantém o estado lua, carrega os arquivos background, mixer e controle 
- * tentando primeiro em lua/ e depois no diretório atual.
- * expõe chamadas às funções globais getBackgroundState,
- * getBackgroundPattern, mixColors e processInput, convertendo parâmetros e
- * retornos entre os tipos lua e c++. em erro de pcall, a mensagem é impressa
- * em stderr e a pilha lua é corrigida com lua_pop; onde aplicável, fallback em c++.
+ * toda a comunicação entre c++ e lua vem daqui. 
+ * Lua expõe uma API C baseada em pilha. Todo valor que vai de C++ para Lua
+ * ou de Lua de volta para C++ passa por essa pilha. 
+ * para chamar uma função Lua a partir daqui, o padrão é sempre o mesmo:
+ *
+ *   lua_getglobal(L, "nomeDaFuncao") → empilha a função
+ *   lua_push*(L, valor) → empilha cada argumento
+ *   lua_pcall(L, nArgs, nRets, 0) → chama, substitui args+fn pelos retornos
+ *   lua_to*(L, -N) → lê os retornos pelo índice negativo
+ *   lua_pop(L, nRets) → limpa a pilha
+ *
+ * se lua_pcall retorna algo diferente de LUA_OK, o topo da pilha contém a
+ * mensagem de erro como string precisando fazer lua_pop para não vazar a pilha.
+ *
+ * Cada método desta classe implementa exatamente essa sequência para a função
+ * Lua que corresponde e onde a função não existe ou falha, há um fallback
+ * em C++ para não travar o programa
  */
 
 #include "lua_bridge.h"
@@ -27,9 +38,6 @@ struct LuaBridgeImpl {
 
 LuaBridge::LuaBridge() : impl(new LuaBridgeImpl{nullptr}) {}
 
-/*
- * destroi o estado lua se existir, libertando todos os recursos associados
- */
 LuaBridge::~LuaBridge() {
     if (impl) {
         if (impl->L) lua_close(impl->L);
@@ -39,11 +47,11 @@ LuaBridge::~LuaBridge() {
 }
 
 /*
- * Cria um novo estado Lua com luaL_newstate, abre as bibliotecas padrão e
- * carrega na ordem os scripts background.lua, mixer.lua e controle.lua,
- * tentando cada um primeiro em lua/ e depois no diretório atual. Se qualquer
- * arquivo não for encontrado ou gerar erro de execução, imprime o erro e
- * retorna false; caso contrário retorna true.
+ * cria um novo lua_State com todas as bibliotecas padrão,
+ * depois carrega cada script do projeto em ordem. Para cada arquivo, tenta
+ * primeiro o prefixo "lua/" depois o diretório atual e o primeiro que
+ * carregar sem erro vence e se algum script falhar, imprime a mensagem que
+ * Lua deixou no topo da pilha e retorna false
  */
 bool LuaBridge::init() {
     if (!impl) return false;
@@ -80,9 +88,12 @@ bool LuaBridge::init() {
 }
 
 /*
- * Invoca mixColors em Lua com a cor atual e o incremento
- * Os três retornos são escritos em newR, newG, newB. Se a função
- * não existir ou pcall falhar, usa fallback: componente a componente min(1, c + ac).
+ * Mistura a cor atual de uma face com um incremento de cor chamando
+ * mixColorsCurrent em Lua ou mixcolors como fallback. Empilhamos os seis
+ * floats de entrada, chamamos com lua_pcall e lemos os três retornos da pilha
+ * em ordem inversa, lua empilha da esquerda para a direita, então o último
+ * retorno fica no topo da pilha. 
+ * se a função não existir ou falhar, é feita a mistura simples.
  */
 void LuaBridge::misturarCor(float r, float g, float b, float ar, float ag, float ab,
                          float& newR, float& newG, float& newB) {
@@ -126,15 +137,15 @@ void LuaBridge::misturarCor(float r, float g, float b, float ar, float ag, float
 }
 
 /*
- * Passa o código da tecla (unsigned char) para processInput(key) em Lua.
- * Espera três valores de retorno (dx, dy, dz) em graus e aplica-os na rotação
- * do cubo com cube.rotate. Em função inexistente ou erro, imprime e limpa a pilha.
+ * Passa o código ASCII da tecla para Lua (controle.lua),
+ * que mapeia WASD para deltas de rotação e devolve três números x,y,z.
+ * esses valores são aplicados diretamente na rotação do cubo.
  */
 void LuaBridge::lidarComEntrada(Cubo& cube, unsigned char key) {
     if (!impl || !impl->L) return;
     lua_getglobal(impl->L, "lidarComEntrada");
     if (!lua_isfunction(impl->L, -1)) {
-        std::cerr << "Função processInput não encontrada!" << std::endl;
+        std::cerr << "Função lidarComEntrada não encontrada!" << std::endl;
         lua_pop(impl->L, 1);
         return;
     }
@@ -147,12 +158,16 @@ void LuaBridge::lidarComEntrada(Cubo& cube, unsigned char key) {
         cube.rotacionar(dx, dy, dz);
         lua_pop(impl->L, 3);
     } else {
-        std::cerr << "Erro ao chamar processInput: "
+        std::cerr << "Erro ao chamar lidarComEntrada: "
                   << lua_tostring(impl->L, -1) << std::endl;
         lua_pop(impl->L, 1);
     }
 }
 
+/*
+ * Notifica o faces.lua sobre uma foto carregada, para que o caminho fique
+ * registrado no estado interno do script.
+ */
 void LuaBridge::definirFotoFace(int faceIndex, const std::string& path) {
     if (!impl || !impl->L) return;
     lua_getglobal(impl->L, "definirFotoFace");
@@ -163,36 +178,34 @@ void LuaBridge::definirFotoFace(int faceIndex, const std::string& path) {
     lua_pushinteger(impl->L, faceIndex);
     lua_pushstring(impl->L, path.c_str());
     if (lua_pcall(impl->L, 2, 0, 0) != LUA_OK) {
-        // Erro ao chamar setFacePhoto: " << lua_tostring(impl->L, -1)
         lua_pop(impl->L, 1);
     }
 }
 
-// cycleMixMode removed — single additive mixing mode only
-
 /*
- * Chama initStars(count) em Lua para gerar a tabela de estrelas com o LCG
- * determinístico. Deve ser chamada uma vez após bridge.init().
+ * Chama inicializarEstrelas em background.lua, que gera a tabela de estrelas
+ * com posições, velocidades e fases determinísticas via LCG com seed fixa.
+ * é chamada uma única vez após init().
  */
 void LuaBridge::inicializarEstrelas(int count) {
     if (!impl || !impl->L) return;
     lua_getglobal(impl->L, "inicializarEstrelas");
     if (!lua_isfunction(impl->L, -1)) {
-        // Função initStars não encontrada!
         lua_pop(impl->L, 1);
         return;
     }
     lua_pushinteger(impl->L, count);
     if (lua_pcall(impl->L, 1, 0, 0) != LUA_OK) {
-        // Erro em initStars: " << lua_tostring(impl->L, -1)
         lua_pop(impl->L, 1);
     }
 }
 
 /*
- * Chama getStarPositions(t) em Lua e lê a tabela flat retornada.
- * Cada estrela ocupa 5 entradas consecutivas: x, y, r, g, b.
- * O vetor 'out' é redimensionado e preenchido com esses valores.
+ * Chama obterPosicoesEstrelas em background.lua e lê a tabela flat
+ * retornada. Lua retorna uma table indexada de 1 a N, onde cada grupo de
+ * cinco valores consecutivos é x, y, r, g, b de uma estrela. Esses valores
+ * são lidos com lua_rawgeti e empilhados no vetor de saída para serem usados
+ * diretamente em glVertex2f e glColor3f. se a função falhar o vetor fica vazio.
  */
 void LuaBridge::obterPosicoesEstrelas(float t, std::vector<float>& out) {
     out.clear();
@@ -222,14 +235,14 @@ void LuaBridge::obterPosicoesEstrelas(float t, std::vector<float>& out) {
         lua_pop(impl->L, 1);
     }
 
-    lua_pop(impl->L, 1);   // remove a tabela da pilha
+    lua_pop(impl->L, 1);
 }
 
 /*
- * Chama resolverFacePicking(valorPixelR) em Lua.
- * Recebe o byte R lido pelo glReadPixels (0–255) e retorna o índice da face
- * (0–5) ou -1 se o clique não atingiu nenhuma face.
- * Fallback em C++: mesma lógica (R entre 1 e 6 → face R-1).
+ * Converte o byte R lido por glReadPixels em índice de face chamando
+ * resolverFacePicking em faces.lua. 
+ * o cubo pinta cada face com glColor3ub durante o picking.
+ * se a chamada falhar faz a mesma conta em C++ como fallback.
  */
 int LuaBridge::resolverFacePicking(int pixelR) {
     if (!impl || !impl->L) {
@@ -253,16 +266,16 @@ int LuaBridge::resolverFacePicking(int pixelR) {
 }
 
 /*
- * Utilitário interno: lê uma tabela Lua de LinhaUI da pilha no índice -1.
- * Cada entrada da tabela tem campos: texto, r, g, b, passo, centralizar.
- * Popula 'out' e remove a tabela da pilha.
+ * lê uma table Lua de LinhaUI da pilha no indice -1 e popula out.
+ * cada entrada da table tem campos texto, r, g, b, passo e centralizar,
+ * que são lidos com lua_getfield e convertidos para o C++.
  */
 static void lerTabelaLinhasUI(lua_State* L, std::vector<LinhaUI>& out) {
     if (!lua_istable(L, -1)) { lua_pop(L, 1); return; }
     int n = (int)lua_rawlen(L, -1);
     out.reserve(n);
     for (int i = 1; i <= n; ++i) {
-        lua_rawgeti(L, -1, i);           // empilha linhas[i]
+        lua_rawgeti(L, -1, i);
         if (!lua_istable(L, -1)) { lua_pop(L, 1); continue; }
 
         LinhaUI linha;
@@ -284,30 +297,14 @@ static void lerTabelaLinhasUI(lua_State* L, std::vector<LinhaUI>& out) {
         lua_pop(L, 1);
 
         out.push_back(linha);
-        lua_pop(L, 1);   // remove linhas[i]
+        lua_pop(L, 1);
     }
-    lua_pop(L, 1);   // remove a tabela principal
+    lua_pop(L, 1);
 }
 
 /*
- * Chama obterLinhasSplash() em Lua e popula 'out' com as LinhaUI retornadas.
- */
-void LuaBridge::obterLinhasSplash(std::vector<LinhaUI>& out) {
-    out.clear();
-    if (!impl || !impl->L) return;
-    lua_getglobal(impl->L, "obterLinhasSplash");
-    if (!lua_isfunction(impl->L, -1)) { lua_pop(impl->L, 1); return; }
-    if (lua_pcall(impl->L, 0, 1, 0) != LUA_OK) {
-        std::cerr << "Erro em obterLinhasSplash: "
-                  << lua_tostring(impl->L, -1) << std::endl;
-        lua_pop(impl->L, 1);
-        return;
-    }
-    lerTabelaLinhasUI(impl->L, out);
-}
-
-/*
- * Chama obterLinhasControles() em Lua e popula 'out' com as LinhaUI retornadas.
+ * Chama obterLinhasControles em ui.lua e usa lerTabelaLinhasUI para
+ * converter a tabela retornada em um vetor para o C++.
  */
 void LuaBridge::obterLinhasControles(std::vector<LinhaUI>& out) {
     out.clear();

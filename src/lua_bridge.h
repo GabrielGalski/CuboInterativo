@@ -1,14 +1,8 @@
 /*
  * lua_bridge.h
- *
- * declara a classe LuaBridge, que mantém um estado lua (lua_State) e expõe
- * métodos para inicializar o interpretador, carregar scripts e invocar funções
- * lua a partir do c++. usado para: estado e padrão do background (getBackgroundState,
- * getBackgroundPattern), mistura de cores (mixColors) e processamento de entrada
- * para rotação (processInput). a implementação usa um ponteiro opaco (PIMPL) para
- * não exigir os headers lua neste ficheiro, evitando dependência de include path
- * do lua em ides. declarações forward de Cubo e Background evitam incluir os
- * respetivos headers.
+ * Interface para integração entre C++ e Lua.
+ * Encapsula o lua_State e fornece métodos para as operações
+ * envolvendo cores, entrada do usuário, partículas e painel de controles.
  */
 
 #ifndef LUA_BRIDGE_H
@@ -23,15 +17,14 @@ class Cubo;
 class Background;
 
 /*
- * Linha de texto de UI retornada pelos scripts Lua (ui.lua).
- * O C++ usa esses dados para renderizar splash e painel de controles
- * sem hardcode de strings ou cores.
+ * Representa uma linha de texto do painel de controles, com cor e espaçamento.
+ * os dados vêm do Lua e o C++ os usa para renderizar sem nenhuma string ou cor no código.
  */
 struct LinhaUI {
     std::string texto;
     float r, g, b;
-    float passo;        // espaçamento vertical em pixels após esta linha
-    bool  centralizar;  // se true, centraliza horizontalmente no painel
+    float passo;
+    bool  centralizar;
 };
 
 class LuaBridge {
@@ -41,23 +34,53 @@ private:
 public:
     LuaBridge();
     ~LuaBridge();
+
+    /*
+     * Cria o lua_State, carrega as bibliotecas padrão e executa os scripts do projeto. 
+     */
     bool init();
+
+    /*
+     * Chama mixColorsCurrent em Lua para misturar a cor atual de uma face
+     * com um incremento de cor. Escreve o resultado nos três floats de saída.
+     */
     void misturarCor(float r, float g, float b, float ar, float ag, float ab,
                   float& newR, float& newG, float& newB);
+
+    /*
+     * Passa o código ASCII da tecla para lidarComEntrada em Lua, que devolve
+     * três deltas (dx, dy, dz) em graus e os aplica na rotação do cubo.
+     */
     void lidarComEntrada(Cubo& cube, unsigned char key);
+
+    /*
+     * Notifica o Lua sobre uma foto carregada em uma face, para que
+     * o estado interno do script fique sincronizado.
+     */
     void definirFotoFace(int faceIndex, const std::string& path);
 
-    // Partículas de estrela delegadas ao Lua
+    /*
+     * Chama inicializarEstrelas em Lua para gerar a tabela de partículas
+     * com um LCG determinístico.
+     */
     void inicializarEstrelas(int count);
-    // Preenche 'out' com pacotes de 5 floats por estrela: x, y, r, g, b
+
+    /*
+     * Chama obterPosicoesEstrelas(t) em Lua e preenche 'out' com pacotes
+     * de 5 floats por estrela: x, y, r, g, b.
+     */
     void obterPosicoesEstrelas(float t, std::vector<float>& out);
 
-    // Color picking: resolve o valor do pixel R (1-6) para índice de face (0-5)
-    // Retorna -1 se nenhuma face foi atingida
+    /*
+     * Passa o valor do canal R lido por glReadPixels para resolverFacePicking
+     * em Lua, que converte R=1..6 no índice de face 0..5.
+     */
     int resolverFacePicking(int pixelR);
 
-    // UI: popula 'out' com as linhas de texto da splash screen e do painel de controles
-    void obterLinhasSplash(std::vector<LinhaUI>& out);
+    /*
+     * Chama obterLinhasControles em Lua e popula 'out' com as LinhaUI para
+     * o painel de controles flutuante.
+     */
     void obterLinhasControles(std::vector<LinhaUI>& out);
 };
 

@@ -1,20 +1,12 @@
 --[[
   mixer.lua
 
-  Sistema de cores aditivo simples para o Cube Editor.
-  Três primárias: Vermelho (1), Azul (2), Verde (3).
-  Mistura:
-    Vermelho + Azul  = Roxo   (magenta)
-    Vermelho + Verde = Amarelo
-    Azul + Verde     = Ciano
-    Roxo/Amarelo/Ciano + a cor complementar = Branco (R+G+B=1,1,1)
-
-  Se a face estiver branca (todos >= 0.99), a nova cor substitui.
-  Caso contrário, mistura aditiva limitada a 1.0.
+  Mistura de cores aditiva para as faces do cubo. Três primárias: Vermelho,
+  Azul, Verde, cores secundárias surgem naturalmente da mistura. Se a face já
+  estiver branca a nova cor substitui em vez de somar.
 ]]
 
 function misturarCores(vermelho, verde, azul, adicionarVermelho, adicionarVerde, adicionarAzul)
-    -- Face branca: começa com a cor aplicada
     if vermelho >= 0.99 and verde >= 0.99 and azul >= 0.99 then
         return adicionarVermelho, adicionarVerde, adicionarAzul
     end
@@ -26,7 +18,7 @@ function misturarCores(vermelho, verde, azul, adicionarVermelho, adicionarVerde,
     return novoVermelho, novoVerde, novoAzul
 end
 
--- Alias usado pelo lua_bridge
+-- Alias chamado pelo lua_bridge
 function mixColorsCurrent(vermelho, verde, azul, adicionarVermelho, adicionarVerde, adicionarAzul)
     return misturarCores(vermelho, verde, azul, adicionarVermelho, adicionarVerde, adicionarAzul)
 end

@@ -1,10 +1,10 @@
 /*
  * background.h
  *
- * declara a classe background. o background sempre é estrelado. a geração e animação das estrelas
- * vive em background.lua (via LuaBridge). Background::render() chama
- * bridge->getStarPositions(t) e desenha os pontos com GL_POINTS.
- * nenhuma lógica de partícula existe em c++ — apenas o desenho OpenGL.
+ * A lógica das estrelas vive inteiramente em background.lua — posição, velocidade,
+ * cintilamento. Background::renderizar() pede ao Lua as posições para o instante
+ * atual e desenha os pontos com GL_POINTS. Sem nenhuma matemática de partícula
+ * em C++, só o desenho OpenGL.
  */
 
 #ifndef BACKGROUND_H
@@ -12,12 +12,12 @@
 
 #include <vector>
 
-class LuaBridge;   //evita include circular
+class LuaBridge;
 
 class Background {
 private:
-    LuaBridge*  ponteiroBridge;            // ponteiro para o bridge Lua (não owned)
-    std::vector<float> cacheEstrelas;  // buffer reutilizável para os dados de estrela
+    LuaBridge*  ponteiroBridge;
+    std::vector<float> cacheEstrelas;
 
 public:
     explicit Background(LuaBridge* b = nullptr);

@@ -1,15 +1,10 @@
 /*
  * background.cpp
  *
- * desenha o fundo estrelado usando dados calculados inteiramente em lua.
- * render() pede ao LuaBridge a tabela flat { x,y,r,g,b ... } via
- * getStarPositions(t) e itera com glVertex2f/glColor3f.
- * o quad escuro de fundo é desenhado diretamente em OpenGL aqui.
- * nenhuma matemática de partícula existe neste arquivo.
- *
- * em modo BENCH_MODE, a chamada lua é cercada por gBench.luaBegin/luaEnd
- * e o tempo de desenho OpenGL puro fica em gBench.cppRenderBegin/End
- * (instrumentado em main.cpp).
+ * Renderiza o fundo estrelado. O quad escuro de fundo é desenhado direto em
+ * OpenGL aqui; as estrelas vêm do background.lua, que retorna
+ * uma tabela flat com x, y, r, g, b por estrela. O C++ só itera esse vetor e
+ * chama glVertex2f/glColor3f fazendo com que nenhuma matemática de animação aconteça aqui.
  */
 
 #include "background.h"
@@ -27,12 +22,10 @@ void Background::definirPadrao() {
 }
 
 /*
- * Configura projeção 2D orto (0-1), desenha o quad de fundo escuro e
- * em seguida solicita ao Lua as posições/cores das estrelas para o
- * instante t atual, desenhando cada uma como um GL_POINT.
- *
- * Em BENCH_MODE a chamada getStarPositions (Lua pura) é isolada do
- * desenho OpenGL para que o painel de bench exiba tempos precisos.
+ * Configura projeção 2D ortogonal, desenha o quad de fundo e então
+ * delega ao Lua o cálculo das posições das estrelas para o tempo atual.
+ * Em BENCH_MODE a chamada Lua é isolada dos timers de C++ para medir
+ * separadamente no painel de benchmark.
  */
 void Background::renderizar() {
     glDisable(GL_DEPTH_TEST);
@@ -53,7 +46,6 @@ void Background::renderizar() {
     if (ponteiroBridge) {
         float t = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
 
-        /* ── Chamada Lua: isolada para medição individual ── */
 #ifdef BENCH_MODE
         gBench.luaBegin();
 #endif
@@ -62,7 +54,6 @@ void Background::renderizar() {
         gBench.luaEnd();
 #endif
 
-        /* ── Desenho OpenGL puro ── */
         glPointSize(1.6f);
         glBegin(GL_POINTS);
         for (size_t i = 0; i + 4 < cacheEstrelas.size(); i += 5) {

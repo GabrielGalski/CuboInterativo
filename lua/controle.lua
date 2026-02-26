@@ -1,17 +1,10 @@
 --[[
   controle.lua
-
-  Mapeia a entrada de teclado (WASD) para incrementos de rotação do cubo.
-  processInput(key) é chamada pelo LuaBridge com o código ASCII da tecla;
-  devolve três valores (dx, dy, dz) em graus para serem aplicados às rotações
-  em X, Y e Z. W/S alteram rotX (inclinação para cima/baixo), A/D alteram rotY
-  (rotação horizontal). O passo fixo é 15 graus por tecla.
+mapeia WASD para incrementos de rotação do cubo. lidarComEntrada(tecla) recebe
+o código ASCII da tecla e devolve (dx, dy, dz) em graus 
+W/S inclinam em X, A/D giram em Y e passo fixo de 15 graus por tecla.
 ]]
 
---[[
-  Converte o código da tecla para minúscula e devolve (dx, dy, dz): W -15 em X,
-  S +15 em X, A -15 em Y, D +15 em Y. Teclas não mapeadas devolvem (0, 0, 0).
-]]
 function lidarComEntrada(tecla)
     local deltaX, deltaY, deltaZ = 0, 0, 0
     local passo = 15.0
