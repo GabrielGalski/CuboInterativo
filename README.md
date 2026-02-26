@@ -25,11 +25,13 @@ src/
 
 - bench.cpp e include/bench.h implementam o monitor de performance que abre como segunda janela quando o programa é compilado com make bench. Mede FPS, tempo de frame, tempo isolado de Lua vs C++, uso de memória e cache de texturas.
 
+
 lua/ 
 - background.lua gera e anima as estrelas com um LCG determinístico. 
 - controle.lua mapeia teclas WASD a incrementos de rotação. 
 - mixer.lua implementa mistura de cores aditiva. 
 - faces.lua armazena o padrão e o caminho de foto de cada face.
+- ui.lua textos do painel de controles.
 
 include/
 - stb_image.h é uma biblioteca single-header de domínio público usada para decodificar imagens PNG, JPG, BMP e outros formatos e aplicá-las como texturas nas faces do cubo.
