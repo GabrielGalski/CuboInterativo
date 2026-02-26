@@ -22,6 +22,18 @@ struct LuaBridgeImpl;
 class Cubo;
 class Background;
 
+/*
+ * Linha de texto de UI retornada pelos scripts Lua (ui.lua).
+ * O C++ usa esses dados para renderizar splash e painel de controles
+ * sem hardcode de strings ou cores.
+ */
+struct LinhaUI {
+    std::string texto;
+    float r, g, b;
+    float passo;        // espaçamento vertical em pixels após esta linha
+    bool  centralizar;  // se true, centraliza horizontalmente no painel
+};
+
 class LuaBridge {
 private:
     LuaBridgeImpl* impl;
@@ -39,6 +51,14 @@ public:
     void inicializarEstrelas(int count);
     // Preenche 'out' com pacotes de 5 floats por estrela: x, y, r, g, b
     void obterPosicoesEstrelas(float t, std::vector<float>& out);
+
+    // Color picking: resolve o valor do pixel R (1-6) para índice de face (0-5)
+    // Retorna -1 se nenhuma face foi atingida
+    int resolverFacePicking(int pixelR);
+
+    // UI: popula 'out' com as linhas de texto da splash screen e do painel de controles
+    void obterLinhasSplash(std::vector<LinhaUI>& out);
+    void obterLinhasControles(std::vector<LinhaUI>& out);
 };
 
 #endif

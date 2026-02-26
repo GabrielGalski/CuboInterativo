@@ -387,16 +387,12 @@ void Cubo::definirCorFace(int face, float r, float g, float b) {
 }
 
 /*
- * Usa color picking para definir faceSelecionada a partir da posição (x, y) em
- * coordenadas de janela. Obtém o viewport, limpa os buffers e desativa
- * iluminação/textura; mantém a projeção atual, empilha a matriz de modelo,
- * aplica a mesma translação e rotações do cubo e desenha as seis faces com
- * glColor3ub(faceId, 0, 0) onde faceId é 1 a 6. Lê o pixel em (x, viewport[3]-y-1)
- * com glReadPixels; o componente R do pixel (1–6) determina a face (selectedFace = R - 1).
- * Restaura as matrizes e limpa o buffer para o desenho normal. Imprime no
- * console o índice e o nome da face ou que nenhuma face foi clicada.
+ * Renderiza a cena de color picking (cada face com glColor3ub(i+1, 0, 0)),
+ * lê o pixel em (x, y) com glReadPixels e retorna o byte R (0–255).
+ * Valores 1–6 correspondem às faces 0–5; 0 indica fundo.
+ * A resolução R → índice de face é feita pelo Lua (bridge.resolverFacePicking).
  */
-void Cubo::selecionarFaceAtual(int x, int y) {
+int Cubo::lerPixelPicking(int x, int y) {
     GLint viewport[4];
     glGetIntegerv(GL_VIEWPORT, viewport);
 
@@ -468,11 +464,18 @@ void Cubo::selecionarFaceAtual(int x, int y) {
     glMatrixMode(GL_MODELVIEW);
     glPopMatrix();
 
-    if (pixel[0] >= 1 && pixel[0] <= 6) {
-        faceSelecionada = pixel[0] - 1;
-    }
-
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    return (int)pixel[0];
+}
+
+/*
+ * Define a face selecionada diretamente.
+ * Chamada pelo main.cpp após resolução do índice via bridge.resolverFacePicking().
+ * Valores fora de [0, 5] são ignorados (mantém seleção atual).
+ */
+void Cubo::definirFaceSelecionada(int face) {
+    if (face >= 0 && face < 6)
+        faceSelecionada = face;
 }
 
 bool Cubo::definirFotoFaceDeArquivo(int face, const std::string& path) {

@@ -127,32 +127,22 @@ void drawSplash() {
     glVertex2f(px2, py2); glVertex2f(px1, py2);
     glEnd();
 
-    // Texto
+    // Linhas de texto fornecidas pelo Lua (ui.lua → obterLinhasSplash)
+    std::vector<LinhaUI> linhas;
+    bridge.obterLinhasSplash(linhas);
+
     float tx = px1 + 20.0f;
     float ty = py2 - 30.0f;
-    glColor4f(0.9f, 0.9f, 1.0f, 0.95f);
-    drawText(tx, ty, "CUBO 3D");
-    ty -= 26.0f;
-    glColor4f(0.6f, 0.6f, 0.75f, 0.9f);
-    drawText(tx, ty, "-------------------------------");
-    ty -= 22.0f;
-    glColor4f(0.85f, 0.85f, 0.9f, 0.9f);
-    drawText(tx, ty, "WASD         Rotacionar cubo");
-    ty -= 18.0f;
-    drawText(tx, ty, "Click esq    Selecionar face");
-    ty -= 18.0f;
-    drawText(tx, ty, "1-Verm  2-Azul  3-Verde  4-Preto");
-    ty -= 18.0f;
-    drawText(tx, ty, "R            Limpar face");
-    ty -= 18.0f;
-    drawText(tx, ty, "Backspace    Imagem na face");
-    ty -= 18.0f;
-    drawText(tx, ty, "Seta Cima/Baixo  Zoom imagem");
-    ty -= 18.0f;
-    drawText(tx, ty, "Seta Esq/Dir     Girar imagem");
-    ty -= 26.0f;
-    glColor4f(0.5f, 0.8f, 0.5f, 0.85f);
-    drawText(px1 + pw * 0.5f - 80.0f, ty, "Pressione para comecar");
+    for (const auto& linha : linhas) {
+        glColor4f(linha.r, linha.g, linha.b, 0.92f);
+        if (linha.centralizar) {
+            float cx = px1 + pw * 0.5f - (float)(linha.texto.size() * 4);
+            drawText(cx, ty, linha.texto);
+        } else {
+            drawText(tx, ty, linha.texto);
+        }
+        ty -= linha.passo;
+    }
 
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
@@ -271,17 +261,15 @@ void display() {
             glVertex2f(px2,py2); glVertex2f(px1,py2);
             glEnd();
 
-            glColor4f(0.85f, 0.85f, 0.88f, 0.92f);
+            // Linhas fornecidas pelo Lua (ui.lua → obterLinhasControles)
+            std::vector<LinhaUI> linhas;
+            bridge.obterLinhasControles(linhas);
             float tx = px1 + 10.0f, ty = py2 - 18.0f;
-            drawText(tx, ty, "Mouse esq: seleciona face");    ty -= 16.0f;
-            drawText(tx, ty, "Mouse dir: remove cor");        ty -= 16.0f;
-            drawText(tx, ty, "WASD: rodar cubo");             ty -= 16.0f;
-            drawText(tx, ty, "1-Verm  2-Azul  3-Verde  4-Preto"); ty -= 16.0f;
-            drawText(tx, ty, "Seta Cima/Baixo: zoom imagem"); ty -= 16.0f;
-            drawText(tx, ty, "Seta esq/dir: girar imagem");   ty -= 16.0f;
-            drawText(tx, ty, "R: resetar face");              ty -= 16.0f;
-            drawText(tx, ty, "Backspace: adicionar foto");      ty -= 16.0f;
-            drawText(tx, ty, "ESC: sair");
+            for (const auto& linha : linhas) {
+                glColor4f(linha.r, linha.g, linha.b, 0.92f);
+                drawText(tx, ty, linha.texto);
+                ty -= linha.passo;
+            }
         }
 
         glDisable(GL_BLEND);
@@ -440,7 +428,10 @@ void mouse(int button, int state, int x, int y) {
             glutPostRedisplay();
             return;
         }
-        cube.selecionarFaceAtual(x, y);
+        // Picking: C++ lê o pixel, Lua resolve o índice da face
+        int pixelR = cube.lerPixelPicking(x, y);
+        int face   = bridge.resolverFacePicking(pixelR);
+        cube.definirFaceSelecionada(face);
     }
     if (button == GLUT_RIGHT_BUTTON) {
         cube.limparCorFaceSelecionada();  // só remove a cor, mantém imagem

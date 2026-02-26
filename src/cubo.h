@@ -36,7 +36,11 @@ public:
     void definirRotacao(float x, float y, float z);
     void limparFaceSelecionada();
     void limparCorFaceSelecionada();
-    void selecionarFaceAtual(int x, int y);
+    // Renderiza cena de picking e retorna o byte R lido (0–255).
+    // O caller passa o valor a bridge.resolverFacePicking() para obter o índice da face.
+    int  lerPixelPicking(int x, int y);
+    // Define diretamente a face selecionada (usado após resolução pelo Lua).
+    void definirFaceSelecionada(int face);
     int obterFaceSelecionada() const { return faceSelecionada; }
     Cor obterCorFace(int face) const { return coresFaces[face]; }
     void definirCorFace(int face, float r, float g, float b);

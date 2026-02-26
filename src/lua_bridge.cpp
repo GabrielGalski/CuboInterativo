@@ -55,10 +55,10 @@ bool LuaBridge::init() {
 
     luaL_openlibs(impl->L);
 
-    const char* files[] = {"background.lua", "mixer.lua", "controle.lua", "faces.lua"};
+    const char* files[] = {"background.lua", "mixer.lua", "controle.lua", "faces.lua", "ui.lua"};
     const char* prefixes[] = {"lua/", ""};
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
         bool loaded = false;
         for (int p = 0; p < 2; p++) {
             std::string path = std::string(prefixes[p]) + files[i];
@@ -223,4 +223,102 @@ void LuaBridge::obterPosicoesEstrelas(float t, std::vector<float>& out) {
     }
 
     lua_pop(impl->L, 1);   // remove a tabela da pilha
+}
+
+/*
+ * Chama resolverFacePicking(valorPixelR) em Lua.
+ * Recebe o byte R lido pelo glReadPixels (0–255) e retorna o índice da face
+ * (0–5) ou -1 se o clique não atingiu nenhuma face.
+ * Fallback em C++: mesma lógica (R entre 1 e 6 → face R-1).
+ */
+int LuaBridge::resolverFacePicking(int pixelR) {
+    if (!impl || !impl->L) {
+        return (pixelR >= 1 && pixelR <= 6) ? pixelR - 1 : -1;
+    }
+    lua_getglobal(impl->L, "resolverFacePicking");
+    if (!lua_isfunction(impl->L, -1)) {
+        lua_pop(impl->L, 1);
+        return (pixelR >= 1 && pixelR <= 6) ? pixelR - 1 : -1;
+    }
+    lua_pushinteger(impl->L, pixelR);
+    if (lua_pcall(impl->L, 1, 1, 0) == LUA_OK) {
+        int face = (int)lua_tonumber(impl->L, -1);
+        lua_pop(impl->L, 1);
+        return face;
+    }
+    std::cerr << "Erro em resolverFacePicking: "
+              << lua_tostring(impl->L, -1) << std::endl;
+    lua_pop(impl->L, 1);
+    return (pixelR >= 1 && pixelR <= 6) ? pixelR - 1 : -1;
+}
+
+/*
+ * Utilitário interno: lê uma tabela Lua de LinhaUI da pilha no índice -1.
+ * Cada entrada da tabela tem campos: texto, r, g, b, passo, centralizar.
+ * Popula 'out' e remove a tabela da pilha.
+ */
+static void lerTabelaLinhasUI(lua_State* L, std::vector<LinhaUI>& out) {
+    if (!lua_istable(L, -1)) { lua_pop(L, 1); return; }
+    int n = (int)lua_rawlen(L, -1);
+    out.reserve(n);
+    for (int i = 1; i <= n; ++i) {
+        lua_rawgeti(L, -1, i);           // empilha linhas[i]
+        if (!lua_istable(L, -1)) { lua_pop(L, 1); continue; }
+
+        LinhaUI linha;
+
+        lua_getfield(L, -1, "texto");
+        linha.texto = lua_isstring(L, -1) ? lua_tostring(L, -1) : "";
+        lua_pop(L, 1);
+
+        lua_getfield(L, -1, "r"); linha.r = (float)lua_tonumber(L, -1); lua_pop(L, 1);
+        lua_getfield(L, -1, "g"); linha.g = (float)lua_tonumber(L, -1); lua_pop(L, 1);
+        lua_getfield(L, -1, "b"); linha.b = (float)lua_tonumber(L, -1); lua_pop(L, 1);
+
+        lua_getfield(L, -1, "passo");
+        linha.passo = (float)lua_tonumber(L, -1);
+        lua_pop(L, 1);
+
+        lua_getfield(L, -1, "centralizar");
+        linha.centralizar = lua_toboolean(L, -1) != 0;
+        lua_pop(L, 1);
+
+        out.push_back(linha);
+        lua_pop(L, 1);   // remove linhas[i]
+    }
+    lua_pop(L, 1);   // remove a tabela principal
+}
+
+/*
+ * Chama obterLinhasSplash() em Lua e popula 'out' com as LinhaUI retornadas.
+ */
+void LuaBridge::obterLinhasSplash(std::vector<LinhaUI>& out) {
+    out.clear();
+    if (!impl || !impl->L) return;
+    lua_getglobal(impl->L, "obterLinhasSplash");
+    if (!lua_isfunction(impl->L, -1)) { lua_pop(impl->L, 1); return; }
+    if (lua_pcall(impl->L, 0, 1, 0) != LUA_OK) {
+        std::cerr << "Erro em obterLinhasSplash: "
+                  << lua_tostring(impl->L, -1) << std::endl;
+        lua_pop(impl->L, 1);
+        return;
+    }
+    lerTabelaLinhasUI(impl->L, out);
+}
+
+/*
+ * Chama obterLinhasControles() em Lua e popula 'out' com as LinhaUI retornadas.
+ */
+void LuaBridge::obterLinhasControles(std::vector<LinhaUI>& out) {
+    out.clear();
+    if (!impl || !impl->L) return;
+    lua_getglobal(impl->L, "obterLinhasControles");
+    if (!lua_isfunction(impl->L, -1)) { lua_pop(impl->L, 1); return; }
+    if (lua_pcall(impl->L, 0, 1, 0) != LUA_OK) {
+        std::cerr << "Erro em obterLinhasControles: "
+                  << lua_tostring(impl->L, -1) << std::endl;
+        lua_pop(impl->L, 1);
+        return;
+    }
+    lerTabelaLinhasUI(impl->L, out);
 }
