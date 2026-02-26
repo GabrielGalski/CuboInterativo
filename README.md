@@ -1,36 +1,36 @@
-# Cubo 3D — C++ & Lua
+# Cubo interativo — C++ & Lua
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/GabrielGalski/Spinning_Cube/03c079c2ca53868754e420e4569c300230b0fd4c/assets/readme/Screenshot%20from%202026-02-23%2017-43-34.png" width="48%">
   <img src="https://raw.githubusercontent.com/GabrielGalski/Spinning_Cube/03c079c2ca53868754e420e4569c300230b0fd4c/assets/readme/Screenshot%20from%202026-02-25%2022-43-48.png" width="48%">
 </p>
 
-Aplicação de um cubo 3D interativo desenvolvido em C++ com OpenGL/GLUT e lógica de scripting em Lua. 
+Aplicação de um cubo interativo desenvolvido nas linguagens C++ e Lua. 
 
-C++: cuida da renderização gráfica e da estrutura da aplicação. 
-Lua: controla a movimentação do cubo, animação das estrelas, processamento de entrada, mistura de cores e os padrões das faces do cubo.
+* C++: cuida da renderização gráfica e da estrutura da aplicação. 
+* Lua: controla a movimentação do cubo, animação das estrelas, processamento de entrada, mistura de cores e os padrões das faces do cubo.
 
 ## Estrutura do repositório
 
 O projeto tem todos os fontes C++ e os scripts Lua separados por diretório.
 
-src/main.cpp é o ponto de entrada da aplicação. Inicializa o GLUT, cria a janela principal (e a janela de benchmark quando compilado em modo bench) e registra os callbacks de teclado, mouse, reshape e display.
+src/main.cpp inicializa o GLUT, cria a janela principal e registra os callbacks de teclado, mouse, reshape e display.
 
-src/cubo.cpp e src/cubo.h definem a classe Cubo, responsável por todo o desenho 3D, color picking por face, carregamento de texturas via stb_image e controle de rotação.
+src/cubo.cpp e src/cubo.h definem a classe Cubo, responsável por todo o desenho 3D, color picking por face, carregamento de arquivos via stb_image e controle de rotação.
 
-src/background.cpp e src/background.h implementam o fundo estrelado. Toda a matemática das estrelas vive em Lua; o C++ apenas solicita as posições calculadas ao bridge e as desenha com GL_POINTS.
+src/background.cpp e src/background.h implementam o fundo estrelado. Toda a matemática das estrelas vive em Lua; o C++ apenas solicita as posições calculadas ao bridge e as desenha.
 
-src/lua_bridge.cpp e src/lua_bridge.h são o bridge entre C++ e Lua. Mantém o estado lua_State, carrega os scripts e expõe chamadas como initStars, getStarPositions, mixColor, handleInput e toggleFacePattern.
+src/lua_bridge.cpp e src/lua_bridge.h são a conexão entre C++ e Lua. Mantém o estado lua_State, carrega os scripts e expõe as chamadas para comunicação das linguagens.
 
-include/bench.cpp e include/bench.h implementam o monitor de performance que abre como segunda janela quando o programa é compilado com make bench. Mede FPS, tempo de frame, tempo isolado de Lua vs C++, uso de memória RSS e cache de texturas.
+include/bench.cpp e include/bench.h implementam o monitor de performance que abre como segunda janela quando o programa é compilado com make bench. Mede FPS, tempo de frame, tempo isolado de Lua vs C++, uso de memória e cache de texturas.
 
-include/stb_image.h é uma biblioteca single-header de domínio público (autor: Sean Barrett) usada para decodificar imagens PNG, JPG, BMP e outros formatos e aplicá-las como texturas nas faces do cubo. Não faz parte do apt — deve ser baixada manualmente antes de compilar.
+include/stb_image.h é uma biblioteca single-header de domínio público usada para decodificar imagens PNG, JPG, BMP e outros formatos e aplicá-las como texturas nas faces do cubo.
 
 lua/ 
-background.lua gera e anima as estrelas com um LCG determinístico. 
-controle.lua mapeia teclas WASD a incrementos de rotação. 
-mixer.lua implementa mistura de cores aditiva. 
-faces.lua armazena o padrão e o caminho de foto de cada face.
+- background.lua gera e anima as estrelas com um LCG determinístico. 
+- controle.lua mapeia teclas WASD a incrementos de rotação. 
+- mixer.lua implementa mistura de cores aditiva. 
+- faces.lua armazena o padrão e o caminho de foto de cada face.
 
 ## Dependências (Linux/Ubuntu)
 
@@ -60,12 +60,6 @@ Para o build com o monitor de performance:
 
     make bench
 
-Para compilar e já executar em um único comando:
-
-    make run
-    ou
-    make bench run
-
 ## Como executar
 
 Após compilar, rode diretamente:
@@ -81,5 +75,5 @@ Após compilar, rode diretamente:
 * R limpa a face selecionada. 
 * Delete abre um seletor de arquivo para aplicar uma foto na face; 
 * as setas para cima e para baixo ajustam o zoom da imagem e as setas laterais a giram. 
-* H exibe o painel de controles.
+* H exibe o painel de controles. Não há mais tela inicial; o painel pode ser aberto a qualquer momento.
 * ESC encerra o programa.
