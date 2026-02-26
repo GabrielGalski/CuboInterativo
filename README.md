@@ -1,4 +1,4 @@
-# Cubo 3D — C++ & Lua
+# Cubo interativo — C++ e Lua
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/GabrielGalski/Spinning_Cube/03c079c2ca53868754e420e4569c300230b0fd4c/assets/readme/Screenshot%20from%202026-02-23%2017-43-34.png" width="48%">
@@ -10,9 +10,7 @@ Aplicação de um cubo interativo desenvolvido nas linguagens C++ e Lua.
 * C++: cuida da renderização gráfica e da estrutura da aplicação. 
 * Lua: controla a movimentação do cubo, animação das estrelas, processamento de entrada, mistura de cores e os padrões das faces do cubo.
 
-## Estrutura do repositório
-
-O projeto tem todos os fontes C++ e os scripts Lua separados por diretório.
+## Estrutura do código
 
 src/
 - main.cpp inicializa o GLUT, cria a janela principal e registra os callbacks de teclado, mouse, reshape e display.
