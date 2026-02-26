@@ -43,17 +43,6 @@ Antes de compilar, instale os pacotes necessários com:
     sudo apt update
     sudo apt install build-essential libglu1-mesa-dev freeglut3-dev liblua5.4-dev zenity
 
-### stb_image.h 
-
-O suporte a imagens depende da biblioteca stb_image.h.
-
-    curl -L "https://raw.githubusercontent.com/nothings/stb/master/stb_image.h" \
-         -o "stb_image.h" \
-         && echo "stb_image.h baixado com sucesso!" \
-         || echo "Falha no download. Acesse: https://github.com/nothings/stb"
-
-sem esse arquivo a funcionalidade de aplicar fotos nas faces do cubo ficará desativada.
-
 ## Como compilar
 
 Para o build normal:
