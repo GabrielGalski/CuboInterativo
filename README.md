@@ -1,5 +1,10 @@
 # Cubo 3D — C++ & Lua
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/GabrielGalski/Spinning_Cube/03c079c2ca53868754e420e4569c300230b0fd4c/assets/readme/Screenshot%20from%202026-02-23%2017-43-34.png" width="48%">
+  <img src="https://raw.githubusercontent.com/GabrielGalski/Spinning_Cube/03c079c2ca53868754e420e4569c300230b0fd4c/assets/readme/Screenshot%20from%202026-02-25%2022-43-48.png" width="48%">
+</p>
+
 Aplicação de um cubo 3D interativo desenvolvido em C++ com OpenGL/GLUT e lógica de scripting em Lua. 
 
 C++: cuida da renderização gráfica e da estrutura da aplicação. 
