@@ -1,4 +1,4 @@
-# Cubo interativo — C++ & Lua
+# Cubo 3D — C++ & Lua
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/GabrielGalski/Spinning_Cube/03c079c2ca53868754e420e4569c300230b0fd4c/assets/readme/Screenshot%20from%202026-02-23%2017-43-34.png" width="48%">
@@ -14,23 +14,25 @@ Aplicação de um cubo interativo desenvolvido nas linguagens C++ e Lua.
 
 O projeto tem todos os fontes C++ e os scripts Lua separados por diretório.
 
-src/main.cpp inicializa o GLUT, cria a janela principal e registra os callbacks de teclado, mouse, reshape e display.
+src/
+- main.cpp inicializa o GLUT, cria a janela principal e registra os callbacks de teclado, mouse, reshape e display.
 
-src/cubo.cpp e src/cubo.h definem a classe Cubo, responsável por todo o desenho 3D, color picking por face, carregamento de arquivos via stb_image e controle de rotação.
+- cubo.cpp e src/cubo.h definem a classe Cubo, responsável por todo o desenho 3D, color picking por face, carregamento de arquivos via stb_image e controle de rotação.
 
-src/background.cpp e src/background.h implementam o fundo estrelado. Toda a matemática das estrelas vive em Lua; o C++ apenas solicita as posições calculadas ao bridge e as desenha.
+- background.cpp e src/background.h implementam o fundo estrelado. Toda a matemática das estrelas vive em Lua; o C++ apenas solicita as posições calculadas ao bridge e as desenha.
 
-src/lua_bridge.cpp e src/lua_bridge.h são a conexão entre C++ e Lua. Mantém o estado lua_State, carrega os scripts e expõe as chamadas para comunicação das linguagens.
+- lua_bridge.cpp e src/lua_bridge.h são a conexão entre C++ e Lua. Mantém o estado lua_State, carrega os scripts e expõe as chamadas para comunicação das linguagens.
 
-include/bench.cpp e include/bench.h implementam o monitor de performance que abre como segunda janela quando o programa é compilado com make bench. Mede FPS, tempo de frame, tempo isolado de Lua vs C++, uso de memória e cache de texturas.
-
-include/stb_image.h é uma biblioteca single-header de domínio público usada para decodificar imagens PNG, JPG, BMP e outros formatos e aplicá-las como texturas nas faces do cubo.
+- bench.cpp e include/bench.h implementam o monitor de performance que abre como segunda janela quando o programa é compilado com make bench. Mede FPS, tempo de frame, tempo isolado de Lua vs C++, uso de memória e cache de texturas.
 
 lua/ 
 - background.lua gera e anima as estrelas com um LCG determinístico. 
 - controle.lua mapeia teclas WASD a incrementos de rotação. 
 - mixer.lua implementa mistura de cores aditiva. 
 - faces.lua armazena o padrão e o caminho de foto de cada face.
+
+include/
+- stb_image.h é uma biblioteca single-header de domínio público usada para decodificar imagens PNG, JPG, BMP e outros formatos e aplicá-las como texturas nas faces do cubo.
 
 ## Dependências (Linux/Ubuntu)
 
