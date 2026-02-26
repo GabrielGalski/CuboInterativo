@@ -17,7 +17,7 @@ BIN_BENCH = cubo_bench
 
 # ── fontes ───────────────────────────────────────────────────────────────────
 SRCS_COMMON = $(wildcard $(SRC_DIR)/*.cpp)
-SRCS_BENCH  = $(SRCS_COMMON) include/bench.cpp
+SRCS_BENCH  = $(SRCS_COMMON) $(SRC_DIR)/bench.cpp
 SRCS        = $(SRCS_COMMON)
 OBJS        = $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
 
@@ -53,13 +53,14 @@ $(BENCH_OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(BENCH_OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -DBENCH_MODE=1 -c -o $@ $<
 
-$(BENCH_OBJ_DIR)/bench.o: include/bench.cpp
+$(BENCH_OBJ_DIR)/bench.o: $(SRC_DIR)/bench.cpp
 	@mkdir -p $(BENCH_OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -DBENCH_MODE=1 -c -o $@ $<
 
 # ── executar ──────────────────────────────────────────────────────────────────
 #
-#   'make run'  → executa o binário normal (cubo).
+#   'make run'  → compila e executa o binário normal ($(BIN)).
+#               (não usa o modo bench; para bench use `make bench run`)
 #
 run: all
 	@./$(BIN)
@@ -79,7 +80,7 @@ help:
 	@echo "    make            compila binário normal ($(BIN))"
 	@echo "    make bench      compila binário com monitor de performance ($(BIN_BENCH))"
 	@echo "    make bench run  compila e executa o modo bench"
-	@echo "    make run        executa $(BIN_BENCH) se existir, senão $(BIN)"
+	@echo "    make run        compila e executa o binário normal ($(BIN))"
 	@echo "    make start      compila e executa o binário normal"
 	@echo "    make clean      remove binários e objetos"
 	@echo ""
