@@ -17,11 +17,15 @@ src/background.cpp e src/background.h implementam o fundo estrelado. Toda a mate
 
 src/lua_bridge.cpp e src/lua_bridge.h são o bridge entre C++ e Lua. Mantém o estado lua_State, carrega os scripts e expõe chamadas como initStars, getStarPositions, mixColor, handleInput e toggleFacePattern.
 
-src/bench.cpp e src/bench.h implementam o monitor de performance que abre como segunda janela quando o programa é compilado com make bench. Mede FPS, tempo de frame, tempo isolado de Lua vs C++, uso de memória RSS e cache de texturas.
+include/bench.cpp e include/bench.h implementam o monitor de performance que abre como segunda janela quando o programa é compilado com make bench. Mede FPS, tempo de frame, tempo isolado de Lua vs C++, uso de memória RSS e cache de texturas.
 
-stb_image.h é uma biblioteca single-header de domínio público (autor: Sean Barrett) usada para decodificar imagens PNG, JPG, BMP e outros formatos e aplicá-las como texturas nas faces do cubo. Não faz parte do apt — deve ser baixada manualmente antes de compilar.
+include/stb_image.h é uma biblioteca single-header de domínio público (autor: Sean Barrett) usada para decodificar imagens PNG, JPG, BMP e outros formatos e aplicá-las como texturas nas faces do cubo. Não faz parte do apt — deve ser baixada manualmente antes de compilar.
 
-lua/ contém os quatro scripts Lua do projeto. background.lua gera e anima as estrelas com um LCG determinístico. controle.lua mapeia teclas WASD a incrementos de rotação. mixer.lua implementa mistura de cores aditiva. faces.lua armazena o padrão e o caminho de foto de cada face.
+lua/ 
+background.lua gera e anima as estrelas com um LCG determinístico. 
+controle.lua mapeia teclas WASD a incrementos de rotação. 
+mixer.lua implementa mistura de cores aditiva. 
+faces.lua armazena o padrão e o caminho de foto de cada face.
 
 ## Dependências (Linux/Ubuntu)
 

@@ -13,36 +13,36 @@
   Retorna uma tabela flat: { x1,y1,r1,g1,b1, x2,y2,r2,g2,b2, ... }
 ]]
 
-local stars = {}
+local estrelas = {}
 local TWO_PI = 2.0 * math.pi
 
 -- LCG idêntico ao usado em C++: mesmos parâmetros de Knuth
-local lcgState = 1337
+local estadoLCG = 1337
 
-local function lcg()
-    lcgState = (lcgState * 1664525 + 1013904223) & 0xFFFFFFFF
-    return lcgState
+local function geradorLCG()
+    estadoLCG = (estadoLCG * 1664525 + 1013904223) & 0xFFFFFFFF
+    return estadoLCG
 end
 
-local function rand01()
-    return (lcg() & 0x00FFFFFF) / 16777215.0
+local function aleatorio01()
+    return (geradorLCG() & 0x00FFFFFF) / 16777215.0
 end
 
 --[[
-  Gera 'count' estrelas com posição, velocidade, brilho e fase aleatórios.
+  Gera 'quantidade' estrelas com posição, velocidade, brilho e fase aleatórios.
   Deve ser chamada uma vez pelo C++ logo após carregar o script.
 ]]
-function initStars(count)
-    lcgState = 1337   -- garante reprodutibilidade
-    stars = {}
-    for i = 1, count do
-        local depth = rand01()
-        stars[i] = {
-            x          = rand01(),
-            y          = rand01(),
-            speed      = 0.02 + depth * 0.10,
-            brightness = 0.45 + (1.0 - depth) * 0.55,
-            twinkle    = rand01() * 6.2831853,
+function inicializarEstrelas(quantidade)
+    estadoLCG = 1337   -- garante reprodutibilidade
+    estrelas = {}
+    for i = 1, quantidade do
+        local profundidade = aleatorio01()
+        estrelas[i] = {
+            x          = aleatorio01(),
+            y          = aleatorio01(),
+            velocidade      = 0.02 + profundidade * 0.10,
+            brilho = 0.45 + (1.0 - profundidade) * 0.55,
+            cintilar    = aleatorio01() * 6.2831853,
         }
     end
 end
@@ -52,48 +52,48 @@ end
   Retorna tabela flat com 5 valores por estrela: x, y, r, g, b.
   O C++ lê essa tabela e chama glVertex2f / glColor3f diretamente.
 ]]
-function getStarPositions(t)
+function obterPosicoesEstrelas(tempo)
     -- Ângulo de rotação global: uma volta completa a cada 120 s
-    local angle = t * (TWO_PI / 120.0)
-    local cosA  = math.cos(angle)
-    local sinA  = math.sin(angle)
+    local angulo = tempo * (TWO_PI / 120.0)
+    local cossenoAngulo  = math.cos(angulo)
+    local senoAngulo  = math.sin(angulo)
 
-    local result = {}
-    local idx = 0
+    local resultado = {}
+    local indice = 0
 
-    for _, s in ipairs(stars) do
+    for _, estrela in ipairs(estrelas) do
         -- 1. Deriva vertical com loop
-        local yy = s.y - (t * s.speed) % 1.0
-        if yy < 0.0 then yy = yy + 1.0 end
+        local yDerivado = estrela.y - (tempo * estrela.velocidade) % 1.0
+        if yDerivado < 0.0 then yDerivado = yDerivado + 1.0 end
 
         -- 2. Oscilação horizontal suave
-        local drift = math.sin(t * 0.15 + s.twinkle) * 0.01
-        local xx = s.x + drift
+        local desvio = math.sin(tempo * 0.15 + estrela.cintilar) * 0.01
+        local xDerivado = estrela.x + desvio
 
         -- 3. Rotação ao redor de (0.5, 0.5)
-        local rx = xx - 0.5
-        local ry = yy - 0.5
-        local rxR = rx * cosA - ry * sinA + 0.5
-        local ryR = rx * sinA + ry * cosA + 0.5
+        local relativoX = xDerivado - 0.5
+        local relativoY = yDerivado - 0.5
+        local rotacionadoX = relativoX * cossenoAngulo - relativoY * senoAngulo + 0.5
+        local rotacionadoY = relativoX * senoAngulo + relativoY * cossenoAngulo + 0.5
 
         -- Wrap para manter dentro de [0, 1]
-        rxR = rxR - math.floor(rxR)
-        ryR = ryR - math.floor(ryR)
+        rotacionadoX = rotacionadoX - math.floor(rotacionadoX)
+        rotacionadoY = rotacionadoY - math.floor(rotacionadoY)
 
         -- 4. Cintilamento
-        local tw = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(t * 2.0 + s.twinkle))
-        local b  = s.brightness * tw
+        local cintilacao = 0.35 + 0.65 * (0.5 + 0.5 * math.sin(tempo * 2.0 + estrela.cintilar))
+        local brilhoFinal  = estrela.brilho * cintilacao
 
         -- Empacota: x, y, r, g, b (leve dominante azul, igual ao C++)
-        result[idx + 1] = rxR
-        result[idx + 2] = ryR
-        result[idx + 3] = b * 0.85
-        result[idx + 4] = b * 0.90
-        result[idx + 5] = b
-        idx = idx + 5
+        resultado[indice + 1] = rotacionadoX
+        resultado[indice + 2] = rotacionadoY
+        resultado[indice + 3] = brilhoFinal * 0.85
+        resultado[indice + 4] = brilhoFinal * 0.90
+        resultado[indice + 5] = brilhoFinal
+        indice = indice + 5
     end
 
-    return result
+    return resultado
 end
 
 -- Estado legado (mantido para compatibilidade com updateBackground no bridge)

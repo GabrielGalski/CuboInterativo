@@ -16,27 +16,27 @@ Cubo       cube;
 Background background;
 LuaBridge  bridge;
 
-int  windowWidth  = 800;
-int  windowHeight = 600;
-bool showControls = false;
-bool showSplash   = true;   // tela inicial
+int  larguraJanela  = 800;
+int  alturaJanela = 600;
+bool mostrarControles = false;
+bool mostrarSplash   = true;   // tela inicial
 
-static int mainWin  = 0;   // ID da janela principal (sempre usado)
+static int janelaPrincipal  = 0;   // ID da janela principal (sempre usado)
 #ifdef BENCH_MODE
-static int benchWin = 0;
+static int janelaBenchmark = 0;
 
 /* Estima memória de textura: assume RGBA 8bpp, escala típica 512×512 por face */
 static long estimateTexKb(const Cubo& c) {
     long kb = 0;
     for (int i = 0; i < 6; ++i)
-        if (c.faceHasTexture(i))
+        if (c.faceTemTextura(i))
             kb += (512 * 512 * 4) / 1024;   // ~1024 kB por textura 512×512 RGBA
     return kb;
 }
 static int countTex(const Cubo& c) {
     int n = 0;
     for (int i = 0; i < 6; ++i)
-        if (c.faceHasTexture(i)) ++n;
+        if (c.faceTemTextura(i)) ++n;
     return n;
 }
 #endif
@@ -84,9 +84,7 @@ static std::string openImageFileDialog() {
     if (!r.empty()) return r;
     r = tryPipe("osascript -e 'POSIX path of (choose file)' 2>/dev/null");
     if (!r.empty()) return r;
-    std::cout << "Digite o caminho da imagem: ";
-    std::getline(std::cin, r);
-    return r;
+    return "";
 }
 #endif
 
@@ -99,14 +97,14 @@ void drawText(float x, float y, const std::string& text) {
 // ── Tela de splash ────────────────────────────────────────────────────────────
 void drawSplash() {
     float pw = 400.0f, ph = 260.0f;
-    float px1 = (windowWidth  - pw) * 0.5f;
-    float py1 = (windowHeight - ph) * 0.5f;
+    float px1 = (larguraJanela  - pw) * 0.5f;
+    float py1 = (alturaJanela - ph) * 0.5f;
     float px2 = px1 + pw;
     float py2 = py1 + ph;
 
     glMatrixMode(GL_PROJECTION);
     glPushMatrix(); glLoadIdentity();
-    glOrtho(0, windowWidth, 0, windowHeight, -1, 1);
+    glOrtho(0, larguraJanela, 0, alturaJanela, -1, 1);
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix(); glLoadIdentity();
 
@@ -161,10 +159,10 @@ void drawSplash() {
 
     // ── Indicador de zoom/rotação (se face tem imagem) ───────────────────────
     {
-        int face = cube.getSelectedFace();
-        if (cube.faceHasTexture(face)) {
-            float s   = cube.getFaceTextureScale(face);
-            int   deg = cube.getFaceTextureRotation(face) * 90;
+        int face = cube.obterFaceSelecionada();
+        if (cube.faceTemTextura(face)) {
+            float s   = cube.obterEscalaTexturaFace(face);
+            int   deg = cube.obterRotacaoTexturaFace(face) * 90;
             char buf[80];
             std::snprintf(buf, sizeof(buf),
                 "Face %d | Zoom: %.1fx | Rot: %d°  [↑/↓ zoom  ←/→ girar]", face, s, deg);
@@ -224,12 +222,12 @@ void display() {
     gBench.cppRenderBegin();
 #endif
 
-    background.render();
+    background.renderizar();
 
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
     glTranslatef(0.0f, 0.0f, -5.0f);
-    cube.render();
+    cube.renderizar();
 
 #ifdef BENCH_MODE
     gBench.cppRenderEnd();
@@ -239,15 +237,15 @@ void display() {
     {
         glMatrixMode(GL_PROJECTION);
         glPushMatrix(); glLoadIdentity();
-        glOrtho(0, windowWidth, 0, windowHeight, -1, 1);
+        glOrtho(0, larguraJanela, 0, alturaJanela, -1, 1);
         glMatrixMode(GL_MODELVIEW);
         glPushMatrix(); glLoadIdentity();
 
         float margin = 12.0f, btnW = 150.0f, btnH = 26.0f;
-        float x1 = windowWidth  - margin - btnW;
-        float y1 = windowHeight - margin - btnH;
-        float x2 = windowWidth  - margin;
-        float y2 = windowHeight - margin;
+        float x1 = larguraJanela  - margin - btnW;
+        float y1 = alturaJanela - margin - btnH;
+        float x2 = larguraJanela  - margin;
+        float y2 = alturaJanela - margin;
 
         glDisable(GL_DEPTH_TEST);
         glEnable(GL_BLEND);
@@ -262,7 +260,7 @@ void display() {
         glColor4f(0.85f, 0.85f, 0.88f, 0.9f);
         drawText(x1 + 10.0f, y1 + 9.0f, "Controles");
 
-        if (showControls) {
+        if (mostrarControles) {
             float panelW = 300.0f, panelH = 200.0f;
             float px2 = x2, py2 = y1 - 8.0f;
             float px1 = px2 - panelW, py1 = py2 - panelH;
@@ -294,7 +292,7 @@ void display() {
         glMatrixMode(GL_MODELVIEW);
     }
 
-    if (showSplash) drawSplash();
+    if (mostrarSplash) drawSplash();
 
     glutSwapBuffers();
 
@@ -302,7 +300,7 @@ void display() {
 #ifdef BENCH_MODE
     gBench.setTexInfo(countTex(cube), estimateTexKb(cube));
     gBench.frameEnd();
-    if (benchWin) glutPostWindowRedisplay(benchWin);
+    if (janelaBenchmark) glutPostWindowRedisplay(janelaBenchmark);
 #endif
 }
 
@@ -314,7 +312,7 @@ void timer(int) {
 
 // ── Teclado ───────────────────────────────────────────────────────────────────
 void keyboard(unsigned char key, int x, int y) {
-    if (showSplash) { showSplash = false; glutPostRedisplay(); return; }
+    if (mostrarSplash) { mostrarSplash = false; glutPostRedisplay(); return; }
 
     switch(key) {
         case 'w': case 'W':
@@ -324,73 +322,71 @@ void keyboard(unsigned char key, int x, int y) {
 #ifdef BENCH_MODE
             gBench.luaBegin();
 #endif
-            bridge.handleInput(cube, key);
+            bridge.lidarComEntrada(cube, key);
 #ifdef BENCH_MODE
             gBench.luaEnd();
 #endif
             break;
 
         case '1': {   // Vermelho
-            Color c = cube.getFaceColor(cube.getSelectedFace());
+            Cor c = cube.obterCorFace(cube.obterFaceSelecionada());
             float nr, ng, nb;
 #ifdef BENCH_MODE
             gBench.luaBegin();
 #endif
-            bridge.mixColor(c.r, c.g, c.b, 1.0f, 0.0f, 0.0f, nr, ng, nb);
+            bridge.misturarCor(c.vermelho, c.verde, c.azul, 1.0f, 0.0f, 0.0f, nr, ng, nb);
 #ifdef BENCH_MODE
             gBench.luaEnd();
 #endif
-            cube.setFaceColor(cube.getSelectedFace(), nr, ng, nb);
+            cube.definirCorFace(cube.obterFaceSelecionada(), nr, ng, nb);
             break;
         }
         case '2': {   // Azul
-            Color c = cube.getFaceColor(cube.getSelectedFace());
+            Cor c = cube.obterCorFace(cube.obterFaceSelecionada());
             float nr, ng, nb;
 #ifdef BENCH_MODE
             gBench.luaBegin();
 #endif
-            bridge.mixColor(c.r, c.g, c.b, 0.0f, 0.0f, 1.0f, nr, ng, nb);
+            bridge.misturarCor(c.vermelho, c.verde, c.azul, 0.0f, 0.0f, 1.0f, nr, ng, nb);
 #ifdef BENCH_MODE
             gBench.luaEnd();
 #endif
-            cube.setFaceColor(cube.getSelectedFace(), nr, ng, nb);
+            cube.definirCorFace(cube.obterFaceSelecionada(), nr, ng, nb);
             break;
         }
         case '3': {   // Verde
-            Color c = cube.getFaceColor(cube.getSelectedFace());
+            Cor c = cube.obterCorFace(cube.obterFaceSelecionada());
             float nr, ng, nb;
 #ifdef BENCH_MODE
             gBench.luaBegin();
 #endif
-            bridge.mixColor(c.r, c.g, c.b, 0.0f, 1.0f, 0.0f, nr, ng, nb);
+            bridge.misturarCor(c.vermelho, c.verde, c.azul, 0.0f, 1.0f, 0.0f, nr, ng, nb);
 #ifdef BENCH_MODE
             gBench.luaEnd();
 #endif
-            cube.setFaceColor(cube.getSelectedFace(), nr, ng, nb);
+            cube.definirCorFace(cube.obterFaceSelecionada(), nr, ng, nb);
             break;
         }
         case '4':   // Preto
-            cube.setFaceColor(cube.getSelectedFace(), 0.0f, 0.0f, 0.0f);
+            cube.definirCorFace(cube.obterFaceSelecionada(), 0.0f, 0.0f, 0.0f);
             break;
 
         case 8: case 127: {   // Backspace / Delete
-            int face = cube.getSelectedFace();
+            int face = cube.obterFaceSelecionada();
             std::string path = openImageFileDialog();
             if (path.empty()) break;
-            if (cube.setFacePhotoFromFile(face, path)) {
-                bridge.setFacePhoto(face, path);
-                cube.setFacePattern(face, 0);
-                std::cout << "Foto aplicada na face " << face << std::endl;
+            if (cube.definirFotoFaceDeArquivo(face, path)) {
+                bridge.definirFotoFace(face, path);
             }
             break;
         }
 
         case 'r': case 'R':
-            cube.clearSelectedFace();
+            cube.limparFaceSelecionada();  // limpa cor e remove imagem
             break;
 
         case 'h': case 'H':
-            showControls = !showControls;
+            mostrarControles = !mostrarControles;
             break;
 
         case 27:
@@ -401,31 +397,26 @@ void keyboard(unsigned char key, int x, int y) {
 
 // ── Teclas especiais ─────────────────────────────────────────────────────────
 void specialKeys(int key, int x, int y) {
-    if (showSplash) { showSplash = false; glutPostRedisplay(); return; }
+    if (mostrarSplash) { mostrarSplash = false; glutPostRedisplay(); return; }
 
-    int face = cube.getSelectedFace();
+    int face = cube.obterFaceSelecionada();
 
     switch (key) {
         case GLUT_KEY_UP:
         case GLUT_KEY_DOWN: {
-            if (!cube.faceHasTexture(face)) break;
-            float s = cube.getFaceTextureScale(face);
+            if (!cube.faceTemTextura(face)) break;
+            float s = cube.obterEscalaTexturaFace(face);
             s += (key == GLUT_KEY_UP) ? 0.1f : -0.1f;
-            cube.setFaceTextureScale(face, s);
-            std::cout << "Zoom face " << face << ": " << cube.getFaceTextureScale(face) << std::endl;
+            cube.definirEscalaTexturaFace(face, s);
             break;
         }
         case GLUT_KEY_LEFT:
-            if (!cube.faceHasTexture(face)) break;
-            cube.rotateFaceTexture(face, -1);
-            std::cout << "Rotacao face " << face << ": "
-                      << cube.getFaceTextureRotation(face) * 90 << " graus" << std::endl;
+            if (!cube.faceTemTextura(face)) break;
+            cube.rotacionarTexturaFace(face, -1);
             break;
         case GLUT_KEY_RIGHT:
-            if (!cube.faceHasTexture(face)) break;
-            cube.rotateFaceTexture(face, +1);
-            std::cout << "Rotacao face " << face << ": "
-                      << cube.getFaceTextureRotation(face) * 90 << " graus" << std::endl;
+            if (!cube.faceTemTextura(face)) break;
+            cube.rotacionarTexturaFace(face, +1);
             break;
     }
     glutPostRedisplay();
@@ -435,24 +426,24 @@ void specialKeys(int key, int x, int y) {
 void mouse(int button, int state, int x, int y) {
     if (state != GLUT_DOWN) return;
 
-    if (showSplash) { showSplash = false; glutPostRedisplay(); return; }
+    if (mostrarSplash) { mostrarSplash = false; glutPostRedisplay(); return; }
 
     if (button == GLUT_LEFT_BUTTON) {
         float margin = 12.0f, btnW = 150.0f, btnH = 26.0f;
-        float x1 = windowWidth  - margin - btnW;
-        float y1 = windowHeight - margin - btnH;
-        float x2 = windowWidth  - margin;
-        float y2 = windowHeight - margin;
-        float mx = (float)x, my = (float)(windowHeight - y);
+        float x1 = larguraJanela  - margin - btnW;
+        float y1 = alturaJanela - margin - btnH;
+        float x2 = larguraJanela  - margin;
+        float y2 = alturaJanela - margin;
+        float mx = (float)x, my = (float)(alturaJanela - y);
         if (mx >= x1 && mx <= x2 && my >= y1 && my <= y2) {
-            showControls = !showControls;
+            mostrarControles = !mostrarControles;
             glutPostRedisplay();
             return;
         }
-        cube.selectCurrentFace(x, y);
+        cube.selecionarFaceAtual(x, y);
     }
     if (button == GLUT_RIGHT_BUTTON) {
-        cube.clearSelectedFace();
+        cube.limparCorFaceSelecionada();  // só remove a cor, mantém imagem
     }
     glutPostRedisplay();
 }
@@ -463,39 +454,27 @@ void init() {
     glDepthFunc(GL_LESS);
 
     if (!bridge.init()) {
-        std::cerr << "Erro ao inicializar Lua!" << std::endl;
         exit(1);
     }
 
-    background.setBridge(&bridge);
+    background.definirBridge(&bridge);
 
 #ifdef BENCH_MODE
     gBench.luaBegin();
 #endif
-    bridge.initStars(420);
+    bridge.inicializarEstrelas(420);
 #ifdef BENCH_MODE
     gBench.luaEnd();
 #endif
 
-    cube.setRotation(15.0f, 25.0f, 0.0f);
-    cube.initPatterns();
-    background.setDefault();
+    cube.definirRotacao(15.0f, 25.0f, 0.0f);
+    background.definirPadrao();
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-
-    std::cout << "\n=== CUBO 3D ===\n"
-              << "1 Vermelho  2 Azul  3 Verde\n"
-              << "R: limpar face   Backspace: foto\n"
-              << "H: ajuda   ESC: sair\n"
-#ifdef BENCH_MODE
-              << "[BENCH MODE ATIVO — janela de monitoramento aberta]\n"
-#endif
-              << "Vermelho+Azul=Roxo | Vermelho+Verde=Amarelo | Azul+Verde=Ciano\n"
-              << "Roxo/Amarelo/Ciano + complementar = Branco\n";
 }
 
 void reshape(int w, int h) {
     if (h == 0) h = 1;
-    windowWidth = w; windowHeight = h;
+    larguraJanela = w; alturaJanela = h;
     glViewport(0, 0, w, h);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
@@ -511,7 +490,7 @@ int main(int argc, char** argv) {
     /* ── Janela principal ── */
     glutInitWindowSize(800, 600);
     glutInitWindowPosition(100, 100);
-    mainWin = glutCreateWindow("Cubo 3d");
+    janelaPrincipal = glutCreateWindow("Cubo 3d");
 
     init();
 
@@ -527,10 +506,10 @@ int main(int argc, char** argv) {
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
     glutInitWindowSize(400, 260);
     glutInitWindowPosition(920, 100);   /* 100 + 800 + 20 px de gap */
-    benchWin = glutCreateWindow("Benchmark");
+    janelaBenchmark = glutCreateWindow("Benchmark");
     glutDisplayFunc(displayBench);
     /* Volta ao contexto da janela principal antes do loop */
-    glutSetWindow(mainWin);
+    glutSetWindow(janelaPrincipal);
 #endif
 
     glutMainLoop();

@@ -1,5 +1,5 @@
 CXX      = g++
-CXXFLAGS = -Wall -std=c++17 \
+CXXFLAGS = -Wall -std=c++17 -Iinclude \
            $(shell pkg-config --cflags lua5.4 2>/dev/null || \
                    pkg-config --cflags lua5.3 2>/dev/null || \
                    pkg-config --cflags lua    2>/dev/null || \
@@ -15,14 +15,16 @@ OBJ_DIR  = obj
 BIN      = cubo
 BIN_BENCH = cubo_bench
 
-# ── Fontes ───────────────────────────────────────────────────────────────────
-SRCS      = $(wildcard $(SRC_DIR)/*.cpp)
-OBJS      = $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
+# ── fontes ───────────────────────────────────────────────────────────────────
+SRCS_COMMON = $(wildcard $(SRC_DIR)/*.cpp)
+SRCS_BENCH  = $(SRCS_COMMON) include/bench.cpp
+SRCS        = $(SRCS_COMMON)
+OBJS        = $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
 
 BENCH_OBJ_DIR = obj_bench
-BENCH_OBJS    = $(patsubst $(SRC_DIR)/%.cpp, $(BENCH_OBJ_DIR)/%.o, $(SRCS))
+BENCH_OBJS    = $(patsubst $(SRC_DIR)/%.cpp, $(BENCH_OBJ_DIR)/%.o, $(SRCS_COMMON)) $(BENCH_OBJ_DIR)/bench.o
 
-# ── Build normal ──────────────────────────────────────────────────────────────
+# ── build normal ──────────────────────────────────────────────────────────────
 all: $(BIN)
 
 $(BIN): $(OBJS)
@@ -32,67 +34,54 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-# ── Build bench ───────────────────────────────────────────────────────────────
+# ── build bench ───────────────────────────────────────────────────────────────
 #
-#   Compila com -DBENCH_MODE=1, produzindo o binário cubo_bench.
-#   Abre automaticamente uma segunda janela "Bench Monitor" ao ser iniciado,
+#   compila com -DBENCH_MODE=1, produzindo o binário cubo_bench.
+#   abre automaticamente uma segunda janela "Bench Monitor" ao ser iniciado,
 #   exibindo em tempo real:
-#     • FPS e tempo de frame (média deslizante de 90 frames)
-#     • Tempo de render C++ vs tempo de runtime Lua (µs, barras coloridas)
-#     • Memória RSS do processo (kB, via /proc/self/status)
-#     • Cache de texturas: nº de faces com foto e estimativa de RAM de GPU
+#     • fps e tempo de frame (média deslizante de 90 frames)
+#     • tempo de render c++ vs tempo de runtime lua (µs, barras coloridas)
+#     • memória rss do processo (kb, via /proc/self/status)
+#     • cache de texturas: nº de faces com foto e estimativa de ram de gpu
 #
 bench: $(BIN_BENCH)
 
 $(BIN_BENCH): $(BENCH_OBJS)
 	$(CXX) -o $@ $^ $(LDFLAGS)
-	@echo ""
-	@echo "  ╔══════════════════════════════════════════╗"
-	@echo "  ║  cubo_bench compilado com -DBENCH_MODE   ║"
-	@echo "  ║  Execute:  make run   ou   ./cubo_bench  ║"
-	@echo "  ╚══════════════════════════════════════════╝"
-	@echo ""
 
 $(BENCH_OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(BENCH_OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -DBENCH_MODE=1 -c -o $@ $<
 
-# ── Executar ──────────────────────────────────────────────────────────────────
-#
-#   'make run'  → executa cubo_bench se existir, senão executa cubo normal.
-#   Permite o fluxo  "make bench run"  em um único comando.
-#
-run:
-	@if [ -f "./$(BIN_BENCH)" ]; then \
-	    echo "» Iniciando $(BIN_BENCH) (modo bench)..."; \
-	    ./$(BIN_BENCH); \
-	elif [ -f "./$(BIN)" ]; then \
-	    echo "» Iniciando $(BIN) (modo normal)..."; \
-	    ./$(BIN); \
-	else \
-	    echo "Nenhum binário encontrado. Execute 'make' ou 'make bench' primeiro."; \
-	    exit 1; \
-	fi
+$(BENCH_OBJ_DIR)/bench.o: include/bench.cpp
+	@mkdir -p $(BENCH_OBJ_DIR)
+	$(CXX) $(CXXFLAGS) -DBENCH_MODE=1 -c -o $@ $<
 
-# Atalho para rodar apenas o binário normal
-start: all
-	@echo "» Iniciando $(BIN) (modo normal)..."
+# ── executar ──────────────────────────────────────────────────────────────────
+#
+#   'make run'  → executa o binário normal (cubo).
+#
+run: all
 	@./$(BIN)
 
-# ── Limpeza ───────────────────────────────────────────────────────────────────
+# atalho para rodar apenas o binário normal
+start: all
+	@./$(BIN)
+
+# ── limpeza ───────────────────────────────────────────────────────────────────
 clean:
 	rm -rf $(OBJ_DIR) $(BENCH_OBJ_DIR) $(BIN) $(BIN_BENCH)
 
-# ── Ajuda ─────────────────────────────────────────────────────────────────────
+# ── ajuda ─────────────────────────────────────────────────────────────────────
 help:
 	@echo ""
-	@echo "  Targets disponíveis:"
-	@echo "    make            Compila binário normal ($(BIN))"
-	@echo "    make bench      Compila binário com monitor de performance ($(BIN_BENCH))"
-	@echo "    make bench run  Compila e executa o modo bench"
-	@echo "    make run        Executa $(BIN_BENCH) se existir, senão $(BIN)"
-	@echo "    make start      Compila e executa o binário normal"
-	@echo "    make clean      Remove binários e objetos"
+	@echo "  targets disponíveis:"
+	@echo "    make            compila binário normal ($(BIN))"
+	@echo "    make bench      compila binário com monitor de performance ($(BIN_BENCH))"
+	@echo "    make bench run  compila e executa o modo bench"
+	@echo "    make run        executa $(BIN_BENCH) se existir, senão $(BIN)"
+	@echo "    make start      compila e executa o binário normal"
+	@echo "    make clean      remove binários e objetos"
 	@echo ""
 
 .PHONY: all bench run start clean help

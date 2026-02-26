@@ -1,13 +1,12 @@
 /*
  * lua_bridge.cpp
  *
- * Implementação do bridge C++/Lua. Cria e mantém o estado Lua, carrega os
- * arquivos background.lua, mixer.lua e controle.lua (procurando em lua/ e no
- * diretório atual). Expõe chamadas às funções globais getBackgroundState,
+ * cria e mantém o estado lua, carrega os arquivos background, mixer e controle 
+ * tentando primeiro em lua/ e depois no diretório atual.
+ * expõe chamadas às funções globais getBackgroundState,
  * getBackgroundPattern, mixColors e processInput, convertendo parâmetros e
- * retornos entre os tipos Lua e C++. Em erro de pcall, a mensagem é impressa
- * em stderr e a pilha Lua é corrigida com lua_pop; onde aplicável, fallback
- * em C++ (ex.: mistura aditiva simples quando mixColors falha).
+ * retornos entre os tipos lua e c++. em erro de pcall, a mensagem é impressa
+ * em stderr e a pilha lua é corrigida com lua_pop; onde aplicável, fallback em c++.
  */
 
 #include "lua_bridge.h"
@@ -29,8 +28,7 @@ struct LuaBridgeImpl {
 LuaBridge::LuaBridge() : impl(new LuaBridgeImpl{nullptr}) {}
 
 /*
- * Destrói o estado Lua se existir, libertando todos os recursos associados
- * ao interpretador (tabelas, funções carregadas, etc.).
+ * destroi o estado lua se existir, libertando todos os recursos associados
  */
 LuaBridge::~LuaBridge() {
     if (impl) {
@@ -82,39 +80,11 @@ bool LuaBridge::init() {
 }
 
 /*
- * Obtém o estado atual do background em Lua chamando getBackgroundState() sem
- * argumentos. Espera dois retornos: índice da cor e modo (0 sólido, 1 gradiente,
- * 2 matemático). Aplica-os em bg via setColorIndex e setModel. Em função
- * inexistente ou erro de pcall, imprime em stderr e remove valores da pilha.
- */
-void LuaBridge::updateBackground(Background& bg) {
-    if (!impl || !impl->L) return;
-    lua_getglobal(impl->L, "getBackgroundState");
-    if (!lua_isfunction(impl->L, -1)) {
-        std::cerr << "Função getBackgroundState não encontrada!" << std::endl;
-        lua_pop(impl->L, 1);
-        return;
-    }
-
-    if (lua_pcall(impl->L, 0, 2, 0) == LUA_OK) {
-        int model = (int)lua_tonumber(impl->L, -1);
-        int colorIdx = (int)lua_tonumber(impl->L, -2);
-        bg.setColorIndex(colorIdx);
-        bg.setModel(model);
-        lua_pop(impl->L, 2);
-    } else {
-        std::cerr << "Erro ao chamar getBackgroundState: "
-                  << lua_tostring(impl->L, -1) << std::endl;
-        lua_pop(impl->L, 1);
-    }
-}
-
-/*
- * Invoca mixColors(r, g, b, ar, ag, ab) em Lua com a cor atual e o incremento
- * (aditivo). Os três retornos são escritos em newR, newG, newB. Se a função
+ * Invoca mixColors em Lua com a cor atual e o incremento
+ * Os três retornos são escritos em newR, newG, newB. Se a função
  * não existir ou pcall falhar, usa fallback: componente a componente min(1, c + ac).
  */
-void LuaBridge::mixColor(float r, float g, float b, float ar, float ag, float ab,
+void LuaBridge::misturarCor(float r, float g, float b, float ar, float ag, float ab,
                          float& newR, float& newG, float& newB) {
     if (!impl || !impl->L) {
         newR = std::min(1.0f, r + ar);
@@ -128,7 +98,6 @@ void LuaBridge::mixColor(float r, float g, float b, float ar, float ag, float ab
         lua_getglobal(impl->L, "mixColors");
     }
     if (!lua_isfunction(impl->L, -1)) {
-        std::cerr << "Função mixColorsCurrent/mixColors não encontrada!" << std::endl;
         lua_pop(impl->L, 1);
         newR = std::min(1.0f, r + ar);
         newG = std::min(1.0f, g + ag);
@@ -149,8 +118,6 @@ void LuaBridge::mixColor(float r, float g, float b, float ar, float ag, float ab
         newR = (float)lua_tonumber(impl->L, -3);
         lua_pop(impl->L, 3);
     } else {
-        std::cerr << "Erro ao chamar mixColors: "
-                  << lua_tostring(impl->L, -1) << std::endl;
         lua_pop(impl->L, 1);
         newR = std::min(1.0f, r + ar);
         newG = std::min(1.0f, g + ag);
@@ -163,9 +130,9 @@ void LuaBridge::mixColor(float r, float g, float b, float ar, float ag, float ab
  * Espera três valores de retorno (dx, dy, dz) em graus e aplica-os na rotação
  * do cubo com cube.rotate. Em função inexistente ou erro, imprime e limpa a pilha.
  */
-void LuaBridge::handleInput(Cubo& cube, unsigned char key) {
+void LuaBridge::lidarComEntrada(Cubo& cube, unsigned char key) {
     if (!impl || !impl->L) return;
-    lua_getglobal(impl->L, "processInput");
+    lua_getglobal(impl->L, "lidarComEntrada");
     if (!lua_isfunction(impl->L, -1)) {
         std::cerr << "Função processInput não encontrada!" << std::endl;
         lua_pop(impl->L, 1);
@@ -177,7 +144,7 @@ void LuaBridge::handleInput(Cubo& cube, unsigned char key) {
         float dx = (float)lua_tonumber(impl->L, -3);
         float dy = (float)lua_tonumber(impl->L, -2);
         float dz = (float)lua_tonumber(impl->L, -1);
-        cube.rotate(dx, dy, dz);
+        cube.rotacionar(dx, dy, dz);
         lua_pop(impl->L, 3);
     } else {
         std::cerr << "Erro ao chamar processInput: "
@@ -186,30 +153,9 @@ void LuaBridge::handleInput(Cubo& cube, unsigned char key) {
     }
 }
 
-void LuaBridge::toggleFacePattern(Cubo& cube) {
+void LuaBridge::definirFotoFace(int faceIndex, const std::string& path) {
     if (!impl || !impl->L) return;
-    int faceIndex = cube.getSelectedFace();
-    lua_getglobal(impl->L, "toggleFacePattern");
-    if (!lua_isfunction(impl->L, -1)) {
-        std::cerr << "Função toggleFacePattern não encontrada!" << std::endl;
-        lua_pop(impl->L, 1);
-        return;
-    }
-    lua_pushinteger(impl->L, faceIndex);
-    if (lua_pcall(impl->L, 1, 1, 0) == LUA_OK) {
-        int pattern = (int)lua_tonumber(impl->L, -1);
-        lua_pop(impl->L, 1);
-        cube.setFacePattern(faceIndex, pattern);
-    } else {
-        std::cerr << "Erro ao chamar toggleFacePattern: "
-                  << lua_tostring(impl->L, -1) << std::endl;
-        lua_pop(impl->L, 1);
-    }
-}
-
-void LuaBridge::setFacePhoto(int faceIndex, const std::string& path) {
-    if (!impl || !impl->L) return;
-    lua_getglobal(impl->L, "setFacePhoto");
+    lua_getglobal(impl->L, "definirFotoFace");
     if (!lua_isfunction(impl->L, -1)) {
         lua_pop(impl->L, 1);
         return;
@@ -217,8 +163,7 @@ void LuaBridge::setFacePhoto(int faceIndex, const std::string& path) {
     lua_pushinteger(impl->L, faceIndex);
     lua_pushstring(impl->L, path.c_str());
     if (lua_pcall(impl->L, 2, 0, 0) != LUA_OK) {
-        std::cerr << "Erro ao chamar setFacePhoto: "
-                  << lua_tostring(impl->L, -1) << std::endl;
+        // Erro ao chamar setFacePhoto: " << lua_tostring(impl->L, -1)
         lua_pop(impl->L, 1);
     }
 }
@@ -229,17 +174,17 @@ void LuaBridge::setFacePhoto(int faceIndex, const std::string& path) {
  * Chama initStars(count) em Lua para gerar a tabela de estrelas com o LCG
  * determinístico. Deve ser chamada uma vez após bridge.init().
  */
-void LuaBridge::initStars(int count) {
+void LuaBridge::inicializarEstrelas(int count) {
     if (!impl || !impl->L) return;
-    lua_getglobal(impl->L, "initStars");
+    lua_getglobal(impl->L, "inicializarEstrelas");
     if (!lua_isfunction(impl->L, -1)) {
-        std::cerr << "Função initStars não encontrada!" << std::endl;
+        // Função initStars não encontrada!
         lua_pop(impl->L, 1);
         return;
     }
     lua_pushinteger(impl->L, count);
     if (lua_pcall(impl->L, 1, 0, 0) != LUA_OK) {
-        std::cerr << "Erro em initStars: " << lua_tostring(impl->L, -1) << std::endl;
+        // Erro em initStars: " << lua_tostring(impl->L, -1)
         lua_pop(impl->L, 1);
     }
 }
@@ -249,19 +194,17 @@ void LuaBridge::initStars(int count) {
  * Cada estrela ocupa 5 entradas consecutivas: x, y, r, g, b.
  * O vetor 'out' é redimensionado e preenchido com esses valores.
  */
-void LuaBridge::getStarPositions(float t, std::vector<float>& out) {
+void LuaBridge::obterPosicoesEstrelas(float t, std::vector<float>& out) {
     out.clear();
     if (!impl || !impl->L) return;
 
-    lua_getglobal(impl->L, "getStarPositions");
+    lua_getglobal(impl->L, "obterPosicoesEstrelas");
     if (!lua_isfunction(impl->L, -1)) {
         lua_pop(impl->L, 1);
         return;
     }
     lua_pushnumber(impl->L, t);
     if (lua_pcall(impl->L, 1, 1, 0) != LUA_OK) {
-        std::cerr << "Erro em getStarPositions: "
-                  << lua_tostring(impl->L, -1) << std::endl;
         lua_pop(impl->L, 1);
         return;
     }

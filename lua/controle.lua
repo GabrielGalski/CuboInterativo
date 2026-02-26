@@ -12,21 +12,21 @@
   Converte o código da tecla para minúscula e devolve (dx, dy, dz): W -15 em X,
   S +15 em X, A -15 em Y, D +15 em Y. Teclas não mapeadas devolvem (0, 0, 0).
 ]]
-function processInput(key)
-    local dx, dy, dz = 0, 0, 0
-    local step = 15.0
+function lidarComEntrada(tecla)
+    local deltaX, deltaY, deltaZ = 0, 0, 0
+    local passo = 15.0
 
-    local char = string.char(key):lower()
+    local caractere = string.char(tecla):lower()
 
-    if char == 'w' then
-        dx = -step
-    elseif char == 's' then
-        dx = step
-    elseif char == 'a' then
-        dy = -step
-    elseif char == 'd' then
-        dy = step
+    if caractere == 'w' then
+        deltaX = -passo
+    elseif caractere == 's' then
+        deltaX = passo
+    elseif caractere == 'a' then
+        deltaY = -passo
+    elseif caractere == 'd' then
+        deltaY = passo
     end
 
-    return dx, dy, dz
+    return deltaX, deltaY, deltaZ
 end

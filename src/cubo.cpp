@@ -1,12 +1,12 @@
 /*
  * cubo.cpp
  *
- * Implementação do cubo 3D: seis faces com vértices em (-1,-1,-1) a (1,1,1),
+ * implementa o cubo 3d: seis faces com vértices em (-1,-1,-1) a (1,1,1),
  * cada uma com cor própria. render() aplica as rotações acumuladas (rotX, rotY,
  * rotZ) e desenha os quads. selectCurrentFace realiza color picking: desenha o
  * cubo com uma cor de identificação por face (R=1..6), lê o pixel na posição
- * do clique (convertendo y de janela para OpenGL), e define selectedFace pelo
- * valor lido. A mistura de cores na face atual pode ser feita por addColorToCurrentFace
+ * do clique (convertendo y de janela para OpenGL), e define faceSelecionada pelo
+ * valor lido. a mistura de cores na face atual pode ser feita por addColorToCurrentFace
  * (lógica local) ou externamente via getFaceColor/setFaceColor e o mixer em Lua.
  */
 
@@ -17,8 +17,7 @@
 #include <fstream>
 #include <sstream>
 
-// stb_image: suporte a PNG, JPG, BMP, TGA, GIF, etc.
-// Baixe em: https://raw.githubusercontent.com/nothings/stb/master/stb_image.h
+
 #if __has_include("stb_image.h")
     #define STB_IMAGE_IMPLEMENTATION
     #include "stb_image.h"
@@ -212,99 +211,45 @@ void cropCenterSquare(int& width, int& height, std::vector<unsigned char>& dataR
     height = side;
     dataRgb.swap(cropped);
 }
-
-GLuint createTextureFromData(int width, int height, const std::vector<unsigned char>& data) {
-    GLuint texId = 0;
-    glGenTextures(1, &texId);
-    glBindTexture(GL_TEXTURE_2D, texId);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    // Garante alinhamento de 1 byte para imagens RGB com largura arbitrária
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4); // restaura padrão
-    return texId;
-}
-
-GLuint createStripeTexture() {
-    const int size = 64;
-    std::vector<unsigned char> data(static_cast<size_t>(size) * static_cast<size_t>(size) * 3u);
-    for (int y = 0; y < size; ++y) {
-        for (int x = 0; x < size; ++x) {
-            int stripe = (x / 8) % 2;
-            float v = stripe == 0 ? 0.3f : 0.7f;
-            unsigned char c = static_cast<unsigned char>(v * 255.0f);
-            size_t index = static_cast<size_t>(y) * static_cast<size_t>(size) * 3u + static_cast<size_t>(x) * 3u;
-            data[index + 0u] = c;
-            data[index + 1u] = c;
-            data[index + 2u] = c;
-        }
-    }
-    return createTextureFromData(size, size, data);
-}
-
-GLuint createDotsTexture() {
-    const int size = 64;
-    std::vector<unsigned char> data(static_cast<size_t>(size) * static_cast<size_t>(size) * 3u);
-    float center = (size - 1) * 0.5f;
-    float radius = size * 0.12f;
-    for (int y = 0; y < size; ++y) {
-        for (int x = 0; x < size; ++x) {
-            float dx = x - center;
-            float dy = y - center;
-            float dist = std::sqrt(dx * dx + dy * dy);
-            float v = dist < radius ? 0.9f : 0.3f;
-            unsigned char c = static_cast<unsigned char>(v * 255.0f);
-            size_t index = static_cast<size_t>(y) * static_cast<size_t>(size) * 3u + static_cast<size_t>(x) * 3u;
-            data[index + 0u] = c;
-            data[index + 1u] = c;
-            data[index + 2u] = c;
-        }
-    }
-    return createTextureFromData(size, size, data);
-}
 }
 
 /*
  * Construtor: rotações e face selecionada em zero; todas as seis faces
  * começam com cor branca (1, 1, 1).
  */
-Cubo::Cubo() : rotX(0), rotY(0), rotZ(0), selectedFace(0), stripesTexture(0), dotsTexture(0) {
+Cubo::Cubo() : rotacaoX(0), rotacaoY(0), rotacaoZ(0), faceSelecionada(0) {
     for (int i = 0; i < 6; ++i) {
-        faceColors[i]           = {1.0f, 1.0f, 1.0f};
-        facePatterns[i]         = 0;
-        faceTextures[i]         = 0;
-        faceTextureHasAlpha[i]  = false;
-        faceTextureScale[i]     = 1.0f;
-        faceTextureRotation[i]  = 0;
+        coresFaces[i]           = {1.0f, 1.0f, 1.0f};
+        texturasFaces[i]         = 0;
+        texturasFacesTemAlfa[i]  = false;
+        escalasTexturasFaces[i]     = 1.0f;
+        rotacoesTexturasFaces[i]  = 0;
     }
 }
 
 /*
  * Salva a matriz de modelo, aplica rotações em graus nos eixos X, Y e Z
  * (na ordem fixa glRotatef X, Y, Z), desenha seis GL_QUADS com as cores
- * de faceColors e restaura a matriz. A ordem dos vértices segue a orientação
+ * de coresFaces e restaura a matriz. A ordem dos vértices segue a orientação
  * frontal de cada face para que a normal apontar para fora.
  */
-void Cubo::render() {
+void Cubo::renderizar() {
     glPushMatrix();
-    glRotatef(rotX, 1.0f, 0.0f, 0.0f);
-    glRotatef(rotY, 0.0f, 1.0f, 0.0f);
-    glRotatef(rotZ, 0.0f, 0.0f, 1.0f);
+    glRotatef(rotacaoX, 1.0f, 0.0f, 0.0f);
+    glRotatef(rotacaoY, 0.0f, 1.0f, 0.0f);
+    glRotatef(rotacaoZ, 0.0f, 0.0f, 1.0f);
     for (int face = 0; face < 6; ++face) {
         Vertex3 v0;
         Vertex3 v1;
         Vertex3 v2;
         Vertex3 v3;
         faceVertices(face, v0, v1, v2, v3);
-        Color c = faceColors[face];
-        bool hasTexture = faceTextures[face] != 0;
+        Cor c = coresFaces[face];
+        bool hasTexture = texturasFaces[face] != 0;
 
         if (hasTexture) {
-            float scale = faceTextureScale[face];
-            int   rot   = faceTextureRotation[face]; // 0-3: passos de 90° CW
+            float scale = escalasTexturasFaces[face];
+            int   rot   = rotacoesTexturasFaces[face]; // 0-3: passos de 90° CW
 
             // Tabela de UVs por rotação para os 4 vértices (v0=BL,v1=BR,v2=TR,v3=TL).
             // Cada linha é {u0,v0, u1,v1, u2,v2, u3,v3}.
@@ -324,7 +269,7 @@ void Cubo::render() {
 
             // ── Passo 1: cor sólida de fundo ─────────────────────────────────
             glDisable(GL_TEXTURE_2D);
-            glColor3f(c.r, c.g, c.b);
+            glColor3f(c.vermelho, c.verde, c.azul);
             glBegin(GL_QUADS);
             glVertex3f(v0.x, v0.y, v0.z);
             glVertex3f(v1.x, v1.y, v1.z);
@@ -337,7 +282,7 @@ void Cubo::render() {
             glPolygonOffset(-1.0f, -1.0f);
             glDepthFunc(GL_LEQUAL);
             glEnable(GL_TEXTURE_2D);
-            glBindTexture(GL_TEXTURE_2D, faceTextures[face]);
+            glBindTexture(GL_TEXTURE_2D, texturasFaces[face]);
             glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
             glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
@@ -378,49 +323,14 @@ void Cubo::render() {
             glDisable(GL_POLYGON_OFFSET_FILL);
             glDepthFunc(GL_LESS);
         } else {
-            int pattern = facePatterns[face];
-            if (pattern == 0) {
-                glDisable(GL_TEXTURE_2D);
-                glColor3f(c.r, c.g, c.b);
-                glBegin(GL_QUADS);
-                glVertex3f(v0.x, v0.y, v0.z);
-                glVertex3f(v1.x, v1.y, v1.z);
-                glVertex3f(v2.x, v2.y, v2.z);
-                glVertex3f(v3.x, v3.y, v3.z);
-                glEnd();
-            } else {
-                GLuint tex = 0;
-                if (pattern == 1) {
-                    tex = stripesTexture;
-                } else if (pattern == 2) {
-                    tex = dotsTexture;
-                }
-                if (tex != 0) {
-                    glEnable(GL_TEXTURE_2D);
-                    glBindTexture(GL_TEXTURE_2D, tex);
-                    glColor3f(c.r, c.g, c.b);
-                    glBegin(GL_QUADS);
-                    glTexCoord2f(0.0f, 0.0f);
-                    glVertex3f(v0.x, v0.y, v0.z);
-                    glTexCoord2f(1.0f, 0.0f);
-                    glVertex3f(v1.x, v1.y, v1.z);
-                    glTexCoord2f(1.0f, 1.0f);
-                    glVertex3f(v2.x, v2.y, v2.z);
-                    glTexCoord2f(0.0f, 1.0f);
-                    glVertex3f(v3.x, v3.y, v3.z);
-                    glEnd();
-                    glDisable(GL_TEXTURE_2D);
-                } else {
-                    glDisable(GL_TEXTURE_2D);
-                    glColor3f(c.r, c.g, c.b);
-                    glBegin(GL_QUADS);
-                    glVertex3f(v0.x, v0.y, v0.z);
-                    glVertex3f(v1.x, v1.y, v1.z);
-                    glVertex3f(v2.x, v2.y, v2.z);
-                    glVertex3f(v3.x, v3.y, v3.z);
-                    glEnd();
-                }
-            }
+            glDisable(GL_TEXTURE_2D);
+            glColor3f(c.vermelho, c.verde, c.azul);
+            glBegin(GL_QUADS);
+            glVertex3f(v0.x, v0.y, v0.z);
+            glVertex3f(v1.x, v1.y, v1.z);
+            glVertex3f(v2.x, v2.y, v2.z);
+            glVertex3f(v3.x, v3.y, v3.z);
+            glEnd();
         }
     }
     glPopMatrix();
@@ -430,61 +340,54 @@ void Cubo::render() {
  * Soma os incrementos dx, dy, dz às rotações internas (em graus). Usado
  * após processInput em Lua retornar os deltas para a tecla pressionada.
  */
-void Cubo::rotate(float dx, float dy, float dz) {
-    rotX += dx;
-    rotY += dy;
-    rotZ += dz;
+void Cubo::rotacionar(float dx, float dy, float dz) {
+    rotacaoX += dx;
+    rotacaoY += dy;
+    rotacaoZ += dz;
 }
 
 /*
  * Substitui as rotações atuais pelos valores absolutos x, y, z (graus).
  * Usado na inicialização para definir a pose inicial do cubo.
  */
-void Cubo::setRotation(float x, float y, float z) {
-    rotX = x;
-    rotY = y;
-    rotZ = z;
+void Cubo::definirRotacao(float x, float y, float z) {
+    rotacaoX = x;
+    rotacaoY = y;
+    rotacaoZ = z;
 }
 
 /*
- * Se a face selecionada estiver praticamente branca (todos os canais >= 0.99),
- * substitui a cor pela nova (r, g, b). Caso contrário, soma aditivamente cada
- * canal e limita a 1.0. Usado quando a mistura não é feita via Lua.
+ * limpa completamente a face selecionada: cor para branco e remove textura
  */
-void Cubo::addColorToCurrentFace(float r, float g, float b) {
-    Color& c = faceColors[selectedFace];
-    if (c.r >= 0.99f && c.g >= 0.99f && c.b >= 0.99f) {
-        c.r = r;
-        c.g = g;
-        c.b = b;
-    } else {
-        c.r = std::min(1.0f, c.r + r);
-        c.g = std::min(1.0f, c.g + g);
-        c.b = std::min(1.0f, c.b + b);
-    }
+void Cubo::limparFaceSelecionada() {
+    coresFaces[faceSelecionada] = {1.0f, 1.0f, 1.0f};
+    texturasFaces[faceSelecionada] = 0;
+    texturasFacesTemAlfa[faceSelecionada] = false;
+    escalasTexturasFaces[faceSelecionada] = 1.0f;
+    rotacoesTexturasFaces[faceSelecionada] = 0;
 }
 
 /*
- * Define a cor da face atualmente selecionada para branco (1, 1, 1).
+ * define a cor da face atualmente selecionada para branco
  */
-void Cubo::clearSelectedFace() {
-    faceColors[selectedFace] = {1.0f, 1.0f, 1.0f};
+void Cubo::limparCorFaceSelecionada() {
+    coresFaces[faceSelecionada] = {1.0f, 1.0f, 1.0f};
 }
 
 /*
  * Atualiza a cor da face indicada pelo índice (0–5) para (r, g, b). Índices
  * fora do intervalo são ignorados.
  */
-void Cubo::setFaceColor(int face, float r, float g, float b) {
+void Cubo::definirCorFace(int face, float r, float g, float b) {
     if (face >= 0 && face < 6) {
-        faceColors[face].r = r;
-        faceColors[face].g = g;
-        faceColors[face].b = b;
+        coresFaces[face].vermelho = r;
+        coresFaces[face].verde = g;
+        coresFaces[face].azul = b;
     }
 }
 
 /*
- * Usa color picking para definir selectedFace a partir da posição (x, y) em
+ * Usa color picking para definir faceSelecionada a partir da posição (x, y) em
  * coordenadas de janela. Obtém o viewport, limpa os buffers e desativa
  * iluminação/textura; mantém a projeção atual, empilha a matriz de modelo,
  * aplica a mesma translação e rotações do cubo e desenha as seis faces com
@@ -493,7 +396,7 @@ void Cubo::setFaceColor(int face, float r, float g, float b) {
  * Restaura as matrizes e limpa o buffer para o desenho normal. Imprime no
  * console o índice e o nome da face ou que nenhuma face foi clicada.
  */
-void Cubo::selectCurrentFace(int x, int y) {
+void Cubo::selecionarFaceAtual(int x, int y) {
     GLint viewport[4];
     glGetIntegerv(GL_VIEWPORT, viewport);
 
@@ -510,9 +413,9 @@ void Cubo::selectCurrentFace(int x, int y) {
     glLoadIdentity();
     glTranslatef(0.0f, 0.0f, -5.0f);
 
-    glRotatef(rotX, 1.0f, 0.0f, 0.0f);
-    glRotatef(rotY, 0.0f, 1.0f, 0.0f);
-    glRotatef(rotZ, 0.0f, 0.0f, 1.0f);
+    glRotatef(rotacaoX, 1.0f, 0.0f, 0.0f);
+    glRotatef(rotacaoY, 0.0f, 1.0f, 0.0f);
+    glRotatef(rotacaoZ, 0.0f, 0.0f, 1.0f);
 
     glBegin(GL_QUADS);
 
@@ -566,54 +469,13 @@ void Cubo::selectCurrentFace(int x, int y) {
     glPopMatrix();
 
     if (pixel[0] >= 1 && pixel[0] <= 6) {
-        selectedFace = pixel[0] - 1;
-        std::cout << "Face selecionada: " << selectedFace << " (";
-        switch(selectedFace) {
-            case 0: std::cout << "Front"; break;
-            case 1: std::cout << "Back"; break;
-            case 2: std::cout << "Top"; break;
-            case 3: std::cout << "Bottom"; break;
-            case 4: std::cout << "Right"; break;
-            case 5: std::cout << "Left"; break;
-        }
-        std::cout << ")" << std::endl;
-    } else {
-        std::cout << "Nenhuma face clicada (pixel: " << (int)pixel[0] << ")" << std::endl;
+        faceSelecionada = pixel[0] - 1;
     }
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
-void Cubo::initPatterns() {
-    if (stripesTexture == 0) {
-        stripesTexture = createStripeTexture();
-    }
-    if (dotsTexture == 0) {
-        dotsTexture = createDotsTexture();
-    }
-}
-
-void Cubo::setFacePattern(int face, int pattern) {
-    if (face < 0 || face >= 6) {
-        return;
-    }
-    if (pattern < 0) {
-        pattern = 0;
-    }
-    if (pattern > 2) {
-        pattern = 2;
-    }
-    facePatterns[face] = pattern;
-}
-
-int Cubo::getFacePattern(int face) const {
-    if (face < 0 || face >= 6) {
-        return 0;
-    }
-    return facePatterns[face];
-}
-
-bool Cubo::setFacePhotoFromFile(int face, const std::string& path) {
+bool Cubo::definirFotoFaceDeArquivo(int face, const std::string& path) {
     if (face < 0 || face >= 6) {
         return false;
     }
@@ -662,25 +524,20 @@ bool Cubo::setFacePhotoFromFile(int face, const std::string& path) {
 #endif
 
     if (!loaded) {
-        // Fallback PPM (sem alpha)
         loaded   = loadPpm(path, width, height, data);
         hasAlpha = false;
     }
 
     if (!loaded) {
-        std::cerr << "Falha ao carregar imagem: " << path << std::endl;
         return false;
     }
 
-    // Remove textura anterior se existir
-    if (faceTextures[face] != 0) {
-        glDeleteTextures(1, &faceTextures[face]);
-        faceTextures[face] = 0;
+    if (texturasFaces[face] != 0) {
+        glDeleteTextures(1, &texturasFaces[face]);
+        texturasFaces[face] = 0;
     }
 
-    // Crop quadrado central (operamos em RGB ou RGBA)
     if (hasAlpha) {
-        // cropCenterSquare opera em RGB (3 bytes), adaptar para RGBA
         if (width != height) {
             int side = (width < height) ? width : height;
             int x0 = (width - side) / 2;
@@ -710,7 +567,6 @@ bool Cubo::setFacePhotoFromFile(int face, const std::string& path) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    // Alinhamento de 1 byte obrigatório para imagens com stride arbitrário
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     if (hasAlpha) {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data.data());
@@ -719,10 +575,10 @@ bool Cubo::setFacePhotoFromFile(int face, const std::string& path) {
     }
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4); // restaura padrão
 
-    faceTextures[face]        = texId;
-    faceTextureHasAlpha[face] = hasAlpha;
-    faceTextureScale[face]    = 1.0f;   // reseta zoom ao carregar nova imagem
-    faceTextureRotation[face] = 0;      // reseta rotação ao carregar nova imagem
+    texturasFaces[face]        = texId;
+    texturasFacesTemAlfa[face] = hasAlpha;
+    escalasTexturasFaces[face]    = 1.0f;   // reseta zoom ao carregar nova imagem
+    rotacoesTexturasFaces[face] = 0;      // reseta rotação ao carregar nova imagem
     return true;
 }
 
@@ -730,11 +586,11 @@ bool Cubo::setFacePhotoFromFile(int face, const std::string& path) {
  * Define o fator de escala da textura de uma face.
  * Clampado a [0.1, 4.0].
  */
-void Cubo::setFaceTextureScale(int face, float s) {
+void Cubo::definirEscalaTexturaFace(int face, float s) {
     if (face < 0 || face >= 6) return;
     if (s < 0.1f) s = 0.1f;
     if (s > 4.0f) s = 4.0f;
-    faceTextureScale[face] = s;
+    escalasTexturasFaces[face] = s;
 }
 
 /*
@@ -742,7 +598,7 @@ void Cubo::setFaceTextureScale(int face, float s) {
  * delta = +1 → 90° no sentido horário; delta = -1 → sentido anti-horário.
  * O valor é mantido no intervalo [0, 3] com módulo circular.
  */
-void Cubo::rotateFaceTexture(int face, int delta) {
+void Cubo::rotacionarTexturaFace(int face, int delta) {
     if (face < 0 || face >= 6) return;
-    faceTextureRotation[face] = ((faceTextureRotation[face] + delta) % 4 + 4) % 4;
+    rotacoesTexturasFaces[face] = ((rotacoesTexturasFaces[face] + delta) % 4 + 4) % 4;
 }

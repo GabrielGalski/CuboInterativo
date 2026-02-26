@@ -1,13 +1,13 @@
 /*
  * lua_bridge.h
  *
- * Declaração da classe LuaBridge, que mantém um estado Lua (lua_State) e expõe
+ * declara a classe LuaBridge, que mantém um estado lua (lua_State) e expõe
  * métodos para inicializar o interpretador, carregar scripts e invocar funções
- * Lua a partir do C++. Usado para: estado e padrão do background (getBackgroundState,
+ * lua a partir do c++. usado para: estado e padrão do background (getBackgroundState,
  * getBackgroundPattern), mistura de cores (mixColors) e processamento de entrada
- * para rotação (processInput). A implementação usa um ponteiro opaco (PIMPL) para
- * não exigir os headers Lua neste ficheiro, evitando dependência de include path
- * do Lua em IDEs. Declarações forward de Cubo e Background evitam incluir os
+ * para rotação (processInput). a implementação usa um ponteiro opaco (PIMPL) para
+ * não exigir os headers lua neste ficheiro, evitando dependência de include path
+ * do lua em ides. declarações forward de Cubo e Background evitam incluir os
  * respetivos headers.
  */
 
@@ -30,17 +30,15 @@ public:
     LuaBridge();
     ~LuaBridge();
     bool init();
-    void updateBackground(Background& bg);
-    void mixColor(float r, float g, float b, float ar, float ag, float ab,
+    void misturarCor(float r, float g, float b, float ar, float ag, float ab,
                   float& newR, float& newG, float& newB);
-    void handleInput(Cubo& cube, unsigned char key);
-    void toggleFacePattern(Cubo& cube);
-    void setFacePhoto(int faceIndex, const std::string& path);
+    void lidarComEntrada(Cubo& cube, unsigned char key);
+    void definirFotoFace(int faceIndex, const std::string& path);
 
     // Partículas de estrela delegadas ao Lua
-    void initStars(int count);
+    void inicializarEstrelas(int count);
     // Preenche 'out' com pacotes de 5 floats por estrela: x, y, r, g, b
-    void getStarPositions(float t, std::vector<float>& out);
+    void obterPosicoesEstrelas(float t, std::vector<float>& out);
 };
 
 #endif
