@@ -75,9 +75,9 @@ Após compilar, rode diretamente:
 
 * WASD rotaciona o cubo. 
 * Clique esquerdo seleciona uma face. 
-* As teclas 1, 2, 3 e 4 aplicam vermelho, azul, verde e preto à face selecionada (mistura aditiva via Lua). 
+* As teclas 1, 2, 3 e 4 aplicam vermelho, azul, verde e preto à face selecionada e permitem mistura de cores. 
 * R limpa a face selecionada. 
 * Delete abre um seletor de arquivo para aplicar uma foto na face; 
 * as setas para cima e para baixo ajustam o zoom da imagem e as setas laterais a giram. 
-* H exibe o painel de controles. Não há mais tela inicial; o painel pode ser aberto a qualquer momento.
+* H exibe o painel de controles.
 * ESC encerra o programa.
